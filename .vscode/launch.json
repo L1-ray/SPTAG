@@ -190,7 +190,7 @@
         },
         {
           "name": "BENCHMARK_CONFIG",
-          "value": "/home/superbench/SPTAG/Debug/benchmark.ini"
+          "value": "benchmark.ini"
         }
       ],
       "externalConsole": false,

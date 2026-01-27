@@ -262,9 +262,20 @@ namespace SPTAG::SPANN {
 
         //headCandidates: search data structrue for "vid" vector
         //headID: the head vector that stands for vid
-        bool IsAssumptionBroken(VectorIndex* p_index, SizeType headID, QueryResult& headCandidates, SizeType vid)
+        bool IsAssumptionBroken(VectorIndex* p_index, SizeType headID, ValueType* vector, SizeType vid)
         {
+            COMMON::QueryResultSet<ValueType> headCandidates(vector, m_opt->m_reassignK);
+            void* rec_query = nullptr;
+            if (p_index->m_pQuantizer) {
+                rec_query = ALIGN_ALLOC(p_index->m_pQuantizer->ReconstructSize());
+                p_index->m_pQuantizer->ReconstructVector((const uint8_t*)headCandidates.GetTarget(), rec_query);
+                headCandidates.SetTarget((ValueType*)rec_query, p_index->m_pQuantizer);
+            }
             p_index->SearchIndex(headCandidates);
+            if (rec_query)
+            {
+                ALIGN_FREE(rec_query);
+            }
             int replicaCount = 0;
             BasicResult* queryResults = headCandidates.GetResults();
             std::vector<Edge> selections(static_cast<size_t>(m_opt->m_replicaCount));
@@ -314,8 +325,8 @@ namespace SPTAG::SPANN {
                 avgDist += dist;
                 distanceSet.push_back(dist);
                 if (m_versionMap->Deleted(vid) || m_versionMap->GetVersion(vid) != version) continue;
-                COMMON::QueryResultSet<ValueType> headCandidates(reinterpret_cast<ValueType*>(vectorId + m_metaDataSize), 64);
-                if (brokenID.find(vid) == brokenID.end() && IsAssumptionBroken(p_index, headID, headCandidates, vid)) {
+                
+                if (brokenID.find(vid) == brokenID.end() && IsAssumptionBroken(p_index, headID, reinterpret_cast<ValueType*>(vectorId + m_metaDataSize), vid)) {
                     /*
                     float_t headDist = p_index->ComputeDistance(headCandidates.GetTarget(), p_index->GetSample(SplitHead));
                     float_t newHeadDist_1 = p_index->ComputeDistance(headCandidates.GetTarget(), p_index->GetSample(newHeads[0]));
@@ -368,9 +379,19 @@ namespace SPTAG::SPANN {
         //"headID" is the head vector before split
         void QuantifySplitCaseB(ExtraWorkSpace* p_exWorkSpace, VectorIndex* p_index, SizeType headID, std::vector<SizeType>& newHeads, SizeType SplitHead, int split_order, int assumptionBrokenNum_top0, std::set<int>& brokenID)
         {
-            COMMON::QueryResultSet<ValueType> nearbyHeads(reinterpret_cast<const ValueType*>(p_index->GetSample(headID)), 64);
-            std::vector<std::string> postingLists;
+            COMMON::QueryResultSet<ValueType> nearbyHeads((ValueType*)(p_index->GetSample(headID)), m_opt->m_reassignK);
+            void* rec_query = nullptr;
+            if (p_index->m_pQuantizer) {
+                rec_query = ALIGN_ALLOC(p_index->m_pQuantizer->ReconstructSize());
+                p_index->m_pQuantizer->ReconstructVector((const uint8_t*)nearbyHeads.GetTarget(), rec_query);
+                nearbyHeads.SetTarget((ValueType*)rec_query, p_index->m_pQuantizer);
+            }
             p_index->SearchIndex(nearbyHeads);
+            if (rec_query)
+            {
+                ALIGN_FREE(rec_query);
+            }
+            std::vector<std::string> postingLists;
             std::string postingList;
             BasicResult* queryResults = nearbyHeads.GetResults();
             int topk = 8;
@@ -1021,9 +1042,18 @@ namespace SPTAG::SPANN {
                     return ErrorCode::Success;
                 }
 
-                QueryResult queryResults(p_index->GetSample(headID), m_opt->m_internalResultNum, false);
+                COMMON::QueryResultSet<ValueType> queryResults((ValueType*)(p_index->GetSample(headID)), m_opt->m_internalResultNum);
+                void* rec_query = nullptr;
+                if (p_index->m_pQuantizer) {
+                    rec_query = ALIGN_ALLOC(p_index->m_pQuantizer->ReconstructSize());
+                    p_index->m_pQuantizer->ReconstructVector((const uint8_t*)queryResults.GetTarget(), rec_query);
+                    queryResults.SetTarget((ValueType*)rec_query, p_index->m_pQuantizer);
+                }
                 p_index->SearchIndex(queryResults);
-
+                if (rec_query)
+                {
+                    ALIGN_FREE(rec_query);
+                }
                 std::string nextPostingList;
                 for (int i = 1; i < queryResults.GetResultNum(); ++i)
                 {
@@ -1297,8 +1327,18 @@ namespace SPTAG::SPANN {
                 std::vector<SizeType> HeadPrevTopK;
                 newHeadsDist.clear();
                 newHeadsDist.resize(0);
-                COMMON::QueryResultSet<ValueType> nearbyHeads(headVector, m_opt->m_reassignK);
+                COMMON::QueryResultSet<ValueType> nearbyHeads((ValueType*)headVector, m_opt->m_reassignK);
+                void* rec_query = nullptr;
+                if (p_index->m_pQuantizer) {
+                    rec_query = ALIGN_ALLOC(p_index->m_pQuantizer->ReconstructSize());
+                    p_index->m_pQuantizer->ReconstructVector((const uint8_t*)nearbyHeads.GetTarget(), rec_query);
+                    nearbyHeads.SetTarget((ValueType*)rec_query, p_index->m_pQuantizer);
+                }
                 p_index->SearchIndex(nearbyHeads);
+                if (rec_query)
+                {
+                    ALIGN_FREE(rec_query);
+                }
                 BasicResult* queryResults = nearbyHeads.GetResults();
                 for (int i = 0; i < nearbyHeads.GetResultNum(); i++) {
                     auto vid = queryResults[i].VID;
@@ -1351,9 +1391,18 @@ namespace SPTAG::SPANN {
 
         bool RNGSelection(std::vector<Edge>& selections, ValueType* queryVector, VectorIndex* p_index, SizeType p_fullID, int& replicaCount, int checkHeadID = -1)
         {
-            QueryResult queryResults(queryVector, m_opt->m_internalResultNum, false);
+            COMMON::QueryResultSet<ValueType> queryResults(queryVector, m_opt->m_internalResultNum);
+            void* rec_query = nullptr;
+            if (p_index->m_pQuantizer) {
+                rec_query = ALIGN_ALLOC(p_index->m_pQuantizer->ReconstructSize());
+                p_index->m_pQuantizer->ReconstructVector((const uint8_t*)queryResults.GetTarget(), rec_query);
+                queryResults.SetTarget((ValueType*)rec_query, p_index->m_pQuantizer);
+            }
             p_index->SearchIndex(queryResults);
-
+            if (rec_query)
+            {
+                ALIGN_FREE(rec_query);
+            }
             replicaCount = 0;
             for (int i = 0; i < queryResults.GetResultNum() && replicaCount < m_opt->m_replicaCount; ++i)
             {

@@ -172,7 +172,7 @@ std::shared_ptr<VectorIndex> BuildIndex(const std::string &outDirectory, std::sh
         [SelectHead]
             isExecute=true
             NumberOfThreads=)" + std::to_string(maxthreads) + R"(
-            SelectHeadType=Random
+            SelectHeadType=BKT
             SelectThreshold=0
             SplitFactor=0
             SplitThreshold=0
@@ -210,7 +210,7 @@ std::shared_ptr<VectorIndex> BuildIndex(const std::string &outDirectory, std::sh
             BufferLength=)" + std::to_string(postingLimit) + R"(
             InPlace=true
             StartFileSizeGB=1
-            OneClusterCutMax=false
+            OneClusterCutMax=true
             ConsistencyCheck=true
             ChecksumCheck=true
             ChecksumInRead=false
@@ -267,7 +267,7 @@ std::shared_ptr<VectorIndex> BuildLargeIndex(const std::string &outDirectory, st
         [SelectHead]
             isExecute=true
             NumberOfThreads=)" + std::to_string(maxthreads) + R"(
-            SelectHeadType=Random
+            SelectHeadType=BKT
             SelectThreshold=0
             SplitFactor=0
             SplitThreshold=0
@@ -308,7 +308,7 @@ std::shared_ptr<VectorIndex> BuildLargeIndex(const std::string &outDirectory, st
             BufferLength=)" + std::to_string(postingLimit) +  R"(
             InPlace=true
             StartFileSizeGB=1
-            OneClusterCutMax=false
+            OneClusterCutMax=true
             ConsistencyCheck=false
             ChecksumCheck=false
             ChecksumInRead=false
@@ -366,7 +366,7 @@ std::vector<QueryResult> SearchOnly(std::shared_ptr<VectorIndex> &vecIndex, std:
 template <typename T>
 float EvaluateRecall(const std::vector<QueryResult> &res, std::shared_ptr<VectorIndex> &vecIndex,
                      std::shared_ptr<VectorSet> &queryset, std::shared_ptr<VectorSet> &truth,
-                     std::shared_ptr<VectorSet> &baseVec, std::shared_ptr<VectorSet> &addVec, SizeType baseCount, int k, int batch, int totalbatches = -1)
+                     std::shared_ptr<VectorSet> &baseVec, std::shared_ptr<VectorSet> &addVec, SizeType baseCount, int recallK, int k, int batch, int totalbatches = -1)
 {
     if (!truth)
     {
@@ -374,7 +374,7 @@ float EvaluateRecall(const std::vector<QueryResult> &res, std::shared_ptr<Vector
         return 0.0f;
     }
 
-    const SizeType recallK = min(k, static_cast<int>(truth->Dimension()));
+    recallK = min(recallK, static_cast<int>(truth->Dimension()));
     float totalRecall = 0.0f;
     float eps = 1e-4f;
     int distbase = (totalbatches + 1) * queryset->Count();
@@ -413,7 +413,7 @@ float EvaluateRecall(const std::vector<QueryResult> &res, std::shared_ptr<Vector
     }
 
     float avgRecall = totalRecall / (queryset->Count() * recallK);
-    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Recall %d@%d = %.4f\n", k, recallK, avgRecall);
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Recall %d@%d = %.4f\n", recallK, k, avgRecall);
     return avgRecall;
 }
 
@@ -423,7 +423,7 @@ float Search(std::shared_ptr<VectorIndex> &vecIndex, std::shared_ptr<VectorSet> 
              std::shared_ptr<VectorSet> &truth, SizeType baseCount, int batch = 0)
 {
     auto results = SearchOnly<T>(vecIndex, queryset, k);
-    return EvaluateRecall<T>(results, vecIndex, queryset, truth, baseVec, addVec, baseCount, k, batch);
+    return EvaluateRecall<T>(results, vecIndex, queryset, truth, baseVec, addVec, baseCount, k, k, batch);
 }
 
 template <typename ValueType>
@@ -493,7 +493,7 @@ void InsertVectors(SPANN::Index<ValueType> *p_index, int insertThreads, int step
 template <typename T>
 void BenchmarkQueryPerformance(std::shared_ptr<VectorIndex> &index, std::shared_ptr<VectorSet> &queryset,
                                std::shared_ptr<VectorSet> &truth, const std::string &truthPath,
-                               SizeType baseVectorCount, int topK, int numThreads, int numQueries, int batches, int totalbatches,
+                               SizeType baseVectorCount, int topK, int searchK, int numThreads, int numQueries, int batches, int totalbatches,
                                std::ostream &benchmarkData, std::string prefix = "")
 {
     // Benchmark: Query performance with detailed latency stats
@@ -503,7 +503,7 @@ void BenchmarkQueryPerformance(std::shared_ptr<VectorIndex> &index, std::shared_
 
     for (int i = 0; i < numQueries; i++)
     {
-        results[i] = QueryResult((const T *)queryset->GetVector(i), topK, false);
+        results[i] = QueryResult((const T *)queryset->GetVector(i), searchK, false);
     }
 
     std::vector<std::thread> threads;
@@ -584,8 +584,8 @@ void BenchmarkQueryPerformance(std::shared_ptr<VectorIndex> &index, std::shared_
 
     BOOST_TEST_MESSAGE("Checking for truth file: " << truthPath);
     std::shared_ptr<VectorSet> pvecset, paddvecset;
-    float avgRecall = EvaluateRecall<T>(results, index, queryset, truth, pvecset, paddvecset, baseVectorCount, topK, batches, totalbatches);
-    BOOST_TEST_MESSAGE("  Recall@" << topK << " = " << (avgRecall * 100.0f) << "%");
+    float avgRecall = EvaluateRecall<T>(results, index, queryset, truth, pvecset, paddvecset, baseVectorCount, topK, searchK, batches, totalbatches);
+    BOOST_TEST_MESSAGE("  Recall" << topK << "@" << searchK << " = " << (avgRecall * 100.0f) << "%");
     BOOST_TEST_MESSAGE("  (Evaluated on " << numQueries << " queries against base vectors)");
     benchmarkData << std::fixed << std::setprecision(4);
     benchmarkData << prefix << "      \"recall\": {\n";
@@ -648,6 +648,7 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
     jsonFile << "    \"queryPath\": \"" << queryPath << "\",\n";
     jsonFile << "    \"truthPath\": \"" << truthPath << "\",\n";
     jsonFile << "    \"indexPath\": \"" << indexPath << "\",\n";
+    jsonFile << "    \"quantizerPath\": \"" << quantizerFilePath << "\",\n";
     jsonFile << "    \"ValueType\": \"" << Helper::Convert::ConvertToString(GetEnumValueType<T>()) << "\",\n";
     jsonFile << "    \"dimension\": " << dimension << ",\n";
     jsonFile << "    \"baseVectorCount\": " << baseVectorCount << ",\n";
@@ -661,6 +662,7 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
     jsonFile << "  },\n";
     jsonFile << "  \"results\": {\n";
 
+    int SearchK = enableQuantization? topK * 4 : topK;
     std::shared_ptr<VectorIndex> index;
     std::shared_ptr<COMMON::IQuantizer> quantizer;
     DimensionType quantizedDimUsed = 0;
@@ -718,6 +720,7 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
             index->SetParameter("SearchDuringUpdate", "true", "BuildSSDIndex");
             index->SetParameter("MergeThreshold", "10", "BuildSSDIndex");
             index->SetParameter("Sampling", "4", "BuildSSDIndex");
+            index->SetParameter("OneClusterCutMax", "true", "BuildSSDIndex");
 
             quantizer = EnsurePQQuantizer(index, quantizerFilePath, baseVectorsFloat, (DimensionType)quantizedDim, numThreads);
             BOOST_REQUIRE(quantizer != nullptr);
@@ -806,10 +809,10 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
 
     // Benchmark 0: Query performance before insertions
     BOOST_TEST_MESSAGE("\n=== Benchmark 0: Query Before Insertions ===");
-    BenchmarkQueryPerformance<T>(index, queryset, truth,truthPath, baseVectorCount, topK,
+    BenchmarkQueryPerformance<T>(index, queryset, truth,truthPath, baseVectorCount, topK, SearchK,
                                  numThreads, numQueries, 0, batches, tmpbenchmark);
     jsonFile << "    \"benchmark0_query_before_insert\": ";
-    BenchmarkQueryPerformance<T>(index, queryset, truth, truthPath, baseVectorCount, topK,
+    BenchmarkQueryPerformance<T>(index, queryset, truth, truthPath, baseVectorCount, topK, SearchK,
                                  numThreads, numQueries, 0, batches, jsonFile);
     jsonFile << ",\n";
     jsonFile.flush();
@@ -958,10 +961,10 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
 
                 BOOST_TEST_MESSAGE("\n=== Benchmark 2: Query After Insertions and Deletions ===");
                 jsonFile << "        \"search\":";
-                BenchmarkQueryPerformance<T>(cloneIndex, queryset, truth, truthPath, baseVectorCount, topK, numThreads,
+                BenchmarkQueryPerformance<T>(cloneIndex, queryset, truth, truthPath, baseVectorCount, topK, SearchK, numThreads,
                                              numQueries, iter + 1, batches, tmpbenchmark, "    ");
                 BenchmarkQueryPerformance<T>(cloneIndex, queryset, truth, truthPath, baseVectorCount,
-                                             topK, numThreads, numQueries, iter + 1, batches, jsonFile, "    ");
+                                             topK, SearchK, numThreads, numQueries, iter + 1, batches, jsonFile, "    ");
                 jsonFile << ",\n";
 
                 start = std::chrono::high_resolution_clock::now();
