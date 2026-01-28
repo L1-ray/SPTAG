@@ -40,9 +40,10 @@ namespace SPTAG
             int _TH;
             DistCalcMethod _M;
             T* centers;
-            T* newTCenters;
+            T* newTCenters;           
             SizeType* counts;
-            float* newCenters;
+            char* reconstructVectors;
+            float* newCenters;            
             SizeType* newCounts;
             int* label;
             SizeType* clusterIdx;
@@ -52,10 +53,11 @@ namespace SPTAG
             std::function<float(const T*, const T*, DimensionType)> fComputeDistance;
             const std::shared_ptr<IQuantizer>& m_pQuantizer;
 
-            KmeansArgs(int k, DimensionType dim, SizeType datasize, int threadnum, DistCalcMethod distMethod, const std::shared_ptr<IQuantizer>& quantizer = nullptr) : _K(k), _DK(k), _D(dim), _RD(dim), _TH(threadnum), _M(distMethod), m_pQuantizer(quantizer) {
+            KmeansArgs(int k, DimensionType dim, SizeType datasize, int threadnum, DistCalcMethod distMethod, const std::shared_ptr<IQuantizer>& quantizer = nullptr) : _K(k), _DK(k), _D(dim), _RD(dim), _TH(threadnum), _M(distMethod), m_pQuantizer(quantizer), reconstructVectors(nullptr) {
                 if (m_pQuantizer) {
                     _RD = m_pQuantizer->ReconstructDim();
                     fComputeDistance = m_pQuantizer->DistanceCalcSelector<T>(distMethod);
+                    reconstructVectors = new char [_TH * m_pQuantizer->ReconstructSize()];
                 }
                 else {
                     fComputeDistance = COMMON::DistanceCalcSelector<T>(distMethod);
@@ -75,8 +77,9 @@ namespace SPTAG
 
             ~KmeansArgs() {
                 ALIGN_FREE(centers);
-                ALIGN_FREE(newTCenters);
+                ALIGN_FREE(newTCenters);                
                 delete[] counts;
+                if (reconstructVectors) delete[] reconstructVectors;
                 delete[] newCenters;
                 delete[] newCounts;
                 delete[] label;
@@ -239,7 +242,7 @@ namespace SPTAG
                     float idist = 0;
                     R *reconstructVector = nullptr;
                     if (args.m_pQuantizer)
-                        reconstructVector = (R *)ALIGN_ALLOC(args.m_pQuantizer->ReconstructSize());
+                        reconstructVector = (R *)(args.reconstructVectors + tid * args.m_pQuantizer->ReconstructSize());
 
                     for (SizeType i = istart; i < iend; i++)
                     {
@@ -248,7 +251,7 @@ namespace SPTAG
                         for (int k = 0; k < args._DK; k++)
                         {
                             float dist = args.fComputeDistance(data[indices[i]], args.centers + k * args._D, args._D) +
-                                         lambda * args.counts[k];
+                                        lambda * args.counts[k];
                             if (dist > -MaxDist && dist < smallestDist)
                             {
                                 clusterid = k;
@@ -264,7 +267,7 @@ namespace SPTAG
                             if (args.m_pQuantizer)
                             {
                                 args.m_pQuantizer->ReconstructVector((const uint8_t *)data[indices[i]],
-                                                                     reconstructVector);
+                                                                    reconstructVector);
                             }
                             else
                             {
@@ -289,8 +292,6 @@ namespace SPTAG
                             }
                         }
                     }
-                    if (args.m_pQuantizer)
-                        ALIGN_FREE(reconstructVector);
                     COMMON::Utils::atomic_float_add(&currDist, idist);
                 });
             }

@@ -270,7 +270,7 @@ std::shared_ptr<VectorIndex> BuildLargeIndex(const std::string &outDirectory, st
         [SelectHead]
             isExecute=true
             NumberOfThreads=)" + std::to_string(maxthreads) + R"(
-            SelectHeadType=BKT
+            SelectHeadType=Random
             SelectThreshold=0
             SplitFactor=0
             SplitThreshold=0
