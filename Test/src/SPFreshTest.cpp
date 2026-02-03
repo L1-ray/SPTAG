@@ -270,7 +270,7 @@ std::shared_ptr<VectorIndex> BuildLargeIndex(const std::string &outDirectory, st
         [SelectHead]
             isExecute=true
             NumberOfThreads=)" + std::to_string(maxthreads) + R"(
-            SelectHeadType=Random
+            SelectHeadType=BKT
             SelectThreshold=0
             SplitFactor=0
             SplitThreshold=0
@@ -744,9 +744,9 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
                 quantizedBase->Save(pquanvecset);
             }
 
-            index = BuildLargeIndex<T>(indexPath, pquanvecset, pmeta, pmetaidx, dist, numThreads, numThreads, quantizer);
+            index = BuildLargeIndex<uint8_t>(indexPath, pquanvecset, pmeta, pmetaidx, dist, numThreads, numThreads, quantizer);
             BOOST_REQUIRE(index != nullptr);
-            index->SetQuantizerADC(false);
+            index->SetQuantizerADC(true);
         }
         else
         {

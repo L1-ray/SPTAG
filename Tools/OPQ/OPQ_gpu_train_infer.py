@@ -331,8 +331,6 @@ def train_pq(args):
 
     if args.quan_test == 0 and len(args.output_quan_vector_file) == 0 and len(args.output_rec_vector_file) == 0:
         os.rename(args.output_truth, os.path.join(output_dir, 'truth.txt' + '.' + str(args.task)))
-        ret = subprocess.run(['ZipKDTree.exe', output_dir, args.output_truth])
-        print (ret)
         return
 
     if len(args.output_quan_vector_file) > 0:
@@ -386,8 +384,6 @@ def train_pq(args):
         os.rename(os.path.join(output_dir, args.output_rec_vector_file + '.' + str(args.task) + '.tmp'), os.path.join(output_dir, args.output_rec_vector_file + '.' + str(args.task)))
 
     os.rename(args.output_truth, os.path.join(output_dir, 'truth.txt' + '.' + str(args.task)))
-    ret = subprocess.run(['ZipKDTree.exe', output_dir, args.output_truth])
-    print (ret)
 
     if args.quan_test > 0:
         queryreader = DataReader(args.query_file, args.dim, -1, args.query_normalize, args.data_type, args.target_type)
@@ -462,7 +458,6 @@ def train_opq(args):
 
     if args.quan_test == 0 and len(args.output_quan_vector_file) == 0 and len(args.output_rec_vector_file) == 0:
         os.rename(args.output_truth, os.path.join(output_dir, 'truth.txt' + '.' + str(args.task)))
-        print (ret)
         return
 
     if len(args.output_quan_vector_file) > 0:
@@ -519,8 +514,6 @@ def train_opq(args):
         os.rename(os.path.join(output_dir, args.output_rec_vector_file + '.' + str(args.task) + '.tmp'), os.path.join(output_dir, args.output_rec_vector_file + '.' + str(args.task)))
 
     os.rename(args.output_truth, os.path.join(output_dir, 'truth.txt' + '.' + str(args.task)))
-    ret = subprocess.run(['ZipKDTree.exe', output_dir, args.output_truth])
-    print (ret)
 
     if args.quan_test > 0:
         queryreader = DataReader(args.query_file, args.dim, -1, args.query_normalize, args.data_type, args.target_type)
@@ -681,8 +674,6 @@ def quan_reconstruct_vectors(args):
     if os.path.exists(os.path.join(output_dir, 'truth.txt' + '.' + str(args.task))):
         os.remove(os.path.join(output_dir, 'truth.txt' + '.' + str(args.task)))
     os.rename(args.output_truth, os.path.join(output_dir, 'truth.txt' + '.' + str(args.task)))
-    ret = subprocess.run(['ZipKDTree.exe', output_dir, args.output_truth])
-    print (ret)
 
 if __name__ == '__main__':
     args = get_config()
@@ -691,24 +682,6 @@ if __name__ == '__main__':
 
     if not os.path.exists(args.output_dir): os.mkdir(args.output_dir)
 
-    if args.data_format != 'DEFAULT':
-        target = 'PreprocessData.exe' if args.data_format == 'BOND' else 'ProcessData.exe'
-        casttype = 'BYTE'
-        if args.data_type == 'uint8': casttype = 'UBYTE'
-        elif args.data_type == 'int16': casttype = 'SHORT'
-        elif args.data_type == 'float32': casttype = 'FLOAT'
-        ret = subprocess.run([target, args.data_file, os.path.join(args.output_dir, 'vectors.bin.%d' % args.task), os.path.join(args.output_dir, 'meta.bin.%d' % args.task), os.path.join(args.output_dir, 'metaindex.bin.%d' % args.task), str(args.dim), casttype, '0'])
-        args.data_file = os.path.join(args.output_dir, 'vectors.bin.%d' % args.task)
-        print(ret)
-
-    if args.query_file[-4:] != '.bin':
-        casttype = 'BYTE'
-        if args.data_type == 'uint8': casttype = 'UBYTE'
-        elif args.data_type == 'int16': casttype = 'SHORT'
-        elif args.data_type == 'float32': casttype = 'FLOAT'
-        ret = subprocess.run(['SearchPreprocess.exe', '-q', args.query_file, '-o', args.query_file + '_queryVector.bin', '-v', args.query_file + '_validQuery.bin', '-d', str(args.dim), '-t', casttype, '-n', '0'])
-        args.query_file = args.query_file + '_queryVector.bin'
-        print(ret)
 
     #gpusearch(args)
 
@@ -722,5 +695,4 @@ if __name__ == '__main__':
 
     if args.log_dir != '':
         localpath = args.output_truth + '.dist\\dist.bin.' + str(args.task)
-        ret = subprocess.run(['CosmosFolderTransfer.exe', 'uploadStream', localpath.replace('\\', '/'), args.log_dir + '/dist/', 'ap'])
-        print (ret)
+        # upload to cloud storage

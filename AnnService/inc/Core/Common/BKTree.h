@@ -39,10 +39,10 @@ namespace SPTAG
             DimensionType _RD;
             int _TH;
             DistCalcMethod _M;
+            int8_t* reconstructVectors;
             T* centers;
-            T* newTCenters;           
+            T* newTCenters;            
             SizeType* counts;
-            char* reconstructVectors;
             float* newCenters;            
             SizeType* newCounts;
             int* label;
@@ -53,11 +53,11 @@ namespace SPTAG
             std::function<float(const T*, const T*, DimensionType)> fComputeDistance;
             const std::shared_ptr<IQuantizer>& m_pQuantizer;
 
-            KmeansArgs(int k, DimensionType dim, SizeType datasize, int threadnum, DistCalcMethod distMethod, const std::shared_ptr<IQuantizer>& quantizer = nullptr) : _K(k), _DK(k), _D(dim), _RD(dim), _TH(threadnum), _M(distMethod), m_pQuantizer(quantizer), reconstructVectors(nullptr) {
+            KmeansArgs(int k, DimensionType dim, SizeType datasize, int threadnum, DistCalcMethod distMethod, const std::shared_ptr<IQuantizer>& quantizer = nullptr) : _K(k), _DK(k), _D(dim), _RD(dim), _TH(threadnum), _M(distMethod), m_pQuantizer(quantizer), reconstructVectors(nullptr) {                            
                 if (m_pQuantizer) {
                     _RD = m_pQuantizer->ReconstructDim();
                     fComputeDistance = m_pQuantizer->DistanceCalcSelector<T>(distMethod);
-                    reconstructVectors = new char [_TH * m_pQuantizer->ReconstructSize()];
+                    reconstructVectors = (int8_t*)ALIGN_ALLOC(_TH * m_pQuantizer->ReconstructSize());
                 }
                 else {
                     fComputeDistance = COMMON::DistanceCalcSelector<T>(distMethod);
@@ -76,10 +76,10 @@ namespace SPTAG
             }
 
             ~KmeansArgs() {
+                if (reconstructVectors) ALIGN_FREE(reconstructVectors);
                 ALIGN_FREE(centers);
-                ALIGN_FREE(newTCenters);                
+                ALIGN_FREE(newTCenters);                                
                 delete[] counts;
-                if (reconstructVectors) delete[] reconstructVectors;
                 delete[] newCenters;
                 delete[] newCounts;
                 delete[] label;

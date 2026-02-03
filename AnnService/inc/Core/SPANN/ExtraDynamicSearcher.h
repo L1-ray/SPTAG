@@ -1796,7 +1796,6 @@ namespace SPTAG::SPANN {
         {
             if (!m_opt->m_checksumInRead) return true;
 
-            ErrorCode ret;
             for (int i = 0; i < pids.size(); i++)
             {
                 if (!m_checkSum.ValidateChecksum((const char *)(postings[i].GetBuffer()),
