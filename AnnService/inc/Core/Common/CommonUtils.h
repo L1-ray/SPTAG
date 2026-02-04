@@ -19,6 +19,12 @@
 
 #define PREFETCH
 
+#ifndef _MSC_VER
+#define EXCHANGE_TYPE_32 int
+#else
+#define EXCHANGE_TYPE_32 long
+#endif
+
 namespace SPTAG
 {
     namespace COMMON
@@ -33,18 +39,19 @@ namespace SPTAG
             static inline float atomic_float_add(volatile float* ptr, const float operand)
             {
                 union {
-                    volatile int iOld;
+                    volatile EXCHANGE_TYPE_32 iOld;
                     float fOld;
                 };
                 union {
-                    int iNew;
+                    EXCHANGE_TYPE_32 iNew;
                     float fNew;
                 };
 
                 while (true) {
-                    iOld = *(volatile int *)ptr;
+                    iOld = *(volatile EXCHANGE_TYPE_32 *)ptr;
                     fNew = fOld + operand;
-                    if (InterlockedCompareExchange((int *)ptr, iNew, iOld) == iOld) {
+                    if (InterlockedCompareExchange((EXCHANGE_TYPE_32 *)ptr, iNew, iOld) == iOld)
+                    {
                         return fNew;
                     }
                 }
