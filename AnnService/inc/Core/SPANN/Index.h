@@ -84,7 +84,7 @@ namespace SPTAG
             inline Options* GetOptions() { return &m_options; }
 
             inline SizeType GetNumSamples() const { return m_versionMap.Count(); }
-            inline DimensionType GetFeatureDim() const { return m_pQuantizer ? m_pQuantizer->ReconstructDim() : m_index->GetFeatureDim(); }
+            inline DimensionType GetFeatureDim() const { return m_index->GetFeatureDim(); }
             inline SizeType GetValueSize() const { return m_options.m_dim * sizeof(T); }
 
             inline int GetCurrMaxCheck() const { return m_options.m_maxCheck; }

@@ -80,34 +80,6 @@ std::shared_ptr<VectorSet> ConvertToFloatVectorSet(const std::shared_ptr<VectorS
     return std::make_shared<BasicVectorSet>(bytes, VectorValueType::Float, dim, count);
 }
 
-    void RemoveStaticSsdIndexIfDynamic(const std::shared_ptr<VectorIndex>& index, const std::string& indexPath)
-    {
-        if (!index)
-            return;
-
-        std::string storage = index->GetParameter("Storage", "BuildSSDIndex");
-        if (storage == "STATIC")
-            return;
-
-        std::string ssdIndex = index->GetParameter("SSDIndex", "Base");
-        if (ssdIndex.empty())
-            return;
-
-        std::filesystem::path ssdIndexPath = std::filesystem::path(indexPath) / ssdIndex;
-        if (std::filesystem::exists(ssdIndexPath))
-        {
-            std::filesystem::remove(ssdIndexPath);
-        }
-    }
-
-std::shared_ptr<VectorSet> SliceQuantizedVectorSet(const ByteArray& data, SizeType start, SizeType count, DimensionType dim)
-{
-    size_t offset = (size_t)start * (size_t)dim;
-    size_t length = (size_t)count * (size_t)dim;
-    ByteArray view(data.Data() + offset, length, false);
-    return std::make_shared<BasicVectorSet>(view, VectorValueType::UInt8, dim, count);
-}
-
 std::shared_ptr<COMMON::IQuantizer> EnsurePQQuantizer(const std::string& quantizerFile,
                                                      const std::shared_ptr<VectorSet>& trainVectors,
                                                      DimensionType quantizedDim,
@@ -464,14 +436,13 @@ void InsertVectors(SPANN::Index<ValueType> *p_index, int insertThreads, int step
                 std::shared_ptr<MetadataSet> meta(new MemMetadataSet(
                     p_meta, ByteArray((std::uint8_t *)offsets, 2 * sizeof(std::uint64_t), true), 1));
                 // For quantized index, pass GetFeatureDim() which returns reconstruct dimension
-                DimensionType dim = p_index->GetFeatureDim();
-                ErrorCode ret = p_index->AddIndex(addset->GetVector((SizeType)index), 1, dim, meta, true);
+                ErrorCode ret = p_index->AddIndex(addset->GetVector((SizeType)index), 1, addset->Dimension(), meta, true);
                 if (ret != ErrorCode::Success)
                 {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
                                  "AddIndex failed. VID:%zu Dim:%d IndexDim:%d Storage:%s Error:%d\n",
                                  index,
-                                 dim,
+                                 addset->Dimension(),
                                  p_index->GetFeatureDim(),
                                  p_index->GetParameter("Storage", "BuildSSDIndex").c_str(),
                                  static_cast<int>(ret));
@@ -809,7 +780,7 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
 
     // Benchmark 0: Query performance before insertions
     BOOST_TEST_MESSAGE("\n=== Benchmark 0: Query Before Insertions ===");
-    BenchmarkQueryPerformance<T>(index, queryset, truth,truthPath, baseVectorCount, topK, SearchK,
+    BenchmarkQueryPerformance<T>(index, queryset, truth, truthPath, baseVectorCount, topK, SearchK,
                                  numThreads, numQueries, 0, batches, tmpbenchmark);
     jsonFile << "    \"benchmark0_query_before_insert\": ";
     BenchmarkQueryPerformance<T>(index, queryset, truth, truthPath, baseVectorCount, topK, SearchK,
@@ -818,7 +789,6 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
     jsonFile.flush();
 
     BOOST_REQUIRE(index->SaveIndex(indexPath) == ErrorCode::Success);
-    RemoveStaticSsdIndexIfDynamic(index, indexPath);
     index = nullptr;
 
 
@@ -972,7 +942,6 @@ void RunBenchmark(const std::string &vectorPath, const std::string &queryPath, c
                 start = std::chrono::high_resolution_clock::now();
                 BOOST_REQUIRE(cloneIndex->SaveIndex(clonePath) == ErrorCode::Success);
                 end = std::chrono::high_resolution_clock::now();
-                RemoveStaticSsdIndexIfDynamic(cloneIndex, clonePath);
 
                 seconds = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000.0f;
                 BOOST_TEST_MESSAGE("  Save Time: " << seconds << " seconds");

@@ -39,7 +39,7 @@ namespace SPTAG
             DimensionType _RD;
             int _TH;
             DistCalcMethod _M;
-            int8_t* reconstructVectors;
+            uint8_t* reconstructVectors;
             T* centers;
             T* newTCenters;            
             SizeType* counts;
@@ -57,7 +57,7 @@ namespace SPTAG
                 if (m_pQuantizer) {
                     _RD = m_pQuantizer->ReconstructDim();
                     fComputeDistance = m_pQuantizer->DistanceCalcSelector<T>(distMethod);
-                    reconstructVectors = (int8_t*)ALIGN_ALLOC(_TH * m_pQuantizer->ReconstructSize());
+                    reconstructVectors = (uint8_t*)ALIGN_ALLOC(_TH * m_pQuantizer->ReconstructSize());
                 }
                 else {
                     fComputeDistance = COMMON::DistanceCalcSelector<T>(distMethod);
