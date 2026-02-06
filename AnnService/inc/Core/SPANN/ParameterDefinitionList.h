@@ -202,6 +202,7 @@ DefineSSDParameter(m_growthFileSize, int, 10, "GrowthFileSizeGB")
 DefineSSDParameter(m_growThreshold, float, 0.05, "GrowthThreshold")
 DefineSSDParameter(m_fDeletePercentageForRefine, float, 0.4F, "DeletePercentageForRefine") // Mutable
 DefineSSDParameter(m_oneClusterCutMax, bool, false, "OneClusterCutMax") // Mutable
+DefineSSDParameter(m_asyncMergeInSearch, bool, true, "AsyncMergeInSearch") // Mutable
 DefineSSDParameter(m_consistencyCheck, bool, false, "ConsistencyCheck") // Mutable
 DefineSSDParameter(m_checksumCheck, bool, false, "ChecksumCheck") // Mutable
 DefineSSDParameter(m_checksumInRead, bool, false, "ChecksumInRead") // Mutable
@@ -209,7 +210,8 @@ DefineSSDParameter(m_cacheSize, int, 0, "CacheSizeGB") // Mutable
 DefineSSDParameter(m_cacheShards, int, 1, "CacheShards") // Mutable
 DefineSSDParameter(m_asyncAppendQueueSize, int, 0, "AsyncAppendQueueSize") // Mutable
 DefineSSDParameter(m_allowZeroReplica, bool, false, "AllowZeroReplica")
-
+DefineSSDParameter(m_centeringToZero, bool, false, "CenteringToZero")
+    
 // Iterative
 DefineSSDParameter(m_headBatch, int, 32, "IterativeSearchHeadBatch") // Mutable
 

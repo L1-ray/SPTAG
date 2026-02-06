@@ -313,7 +313,7 @@ namespace SPTAG {
 
             virtual ErrorCode GetPostingDebug(ExtraWorkSpace* p_exWorkSpace, std::shared_ptr<VectorIndex> p_index, SizeType vid, std::vector<SizeType>& VIDs, std::shared_ptr<VectorSet>& vecs) = 0;
             
-            virtual ErrorCode RefineIndex(std::shared_ptr<VectorIndex> p_index, bool p_prereassign = true,
+            virtual ErrorCode RefineIndex(std::shared_ptr<VectorIndex>& p_index, bool p_prereassign = true,
                                           std::vector<SizeType> *p_headmapping = nullptr,
                                           std::vector<SizeType> *p_mapping = nullptr)
             {
@@ -330,7 +330,7 @@ namespace SPTAG {
             virtual void ForceCompaction() { return; }
 
             virtual bool CheckValidPosting(SizeType postingID) = 0;
-            virtual ErrorCode CheckPosting(SizeType postingiD, std::vector<bool> *visited = nullptr,
+            virtual ErrorCode CheckPosting(SizeType postingiD, std::vector<std::uint8_t> *visited = nullptr,
                                            ExtraWorkSpace *p_exWorkSpace = nullptr) = 0;
             virtual SizeType SearchVector(ExtraWorkSpace* p_exWorkSpace, std::shared_ptr<VectorSet>& p_vectorSet,
                 std::shared_ptr<VectorIndex> p_index, int testNum = 64, SizeType VID = -1) { return -1; }

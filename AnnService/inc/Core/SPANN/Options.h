@@ -189,7 +189,9 @@ namespace SPTAG {
             bool m_checksumInRead;
             int m_cacheSize;
             int m_cacheShards;
-            
+            bool m_asyncMergeInSearch;
+            bool m_centeringToZero;
+
             // Iterative
             int m_headBatch;
             int m_asyncAppendQueueSize;

@@ -260,11 +260,17 @@ namespace SPTAG
             {
                 if (data != nullptr) {
                     if (ownData) ALIGN_FREE(data);
-                    for (char* ptr : *incBlocks) ALIGN_FREE(ptr);
+                }
+                rows = rows_;
+
+                if (incBlocks != nullptr)
+                {
+                    for (char *ptr : *incBlocks)
+                        ALIGN_FREE(ptr);
                     incBlocks->clear();
                 }
-
-                rows = rows_;
+                incRows = 0;
+                
                 if (rowEnd_ >= colStart_) cols = rowEnd_;
                 else cols = cols_ * sizeof(T);
                 data = (char*)data_;
@@ -390,11 +396,7 @@ namespace SPTAG
                 IOBINARY(pInput, ReadBinary, sizeof(SizeType), (char*)&(r));
                 IOBINARY(pInput, ReadBinary, sizeof(DimensionType), (char*)(&c));
 
-                if (data == nullptr) Initialize(r, c, blockSize, capacity);
-                else if (r > rows + incRows) {
-                    SPTAGLIB_LOG(Helper::LogLevel::LL_Warning, "Read more data (%d, %d) than before (%d, %d)!\n", r, c, rows + incRows, mycols);
-                    if(AddBatch(r - rows - incRows) != ErrorCode::Success) return ErrorCode::MemoryOverFlow;
-                }
+                if (data == nullptr || r != rows + incRows) Initialize(r, c, blockSize, capacity);
                 
                 for (SizeType i = 0; i < r; i++) {
                     IOBINARY(pInput, ReadBinary, sizeof(T) * mycols, (char*)At(i));

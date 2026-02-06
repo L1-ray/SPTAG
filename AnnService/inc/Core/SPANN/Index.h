@@ -17,7 +17,7 @@
 #include "inc/Core/Common/VersionLabel.h"
 #include "inc/Core/Common/PostingSizeRecord.h"
 
-#include "inc/Core/Common/Labelset.h"
+#include "inc/Core/Common/LabelSet.h"
 #include "inc/Helper/SimpleIniReader.h"
 #include "inc/Helper/StringConvert.h"
 #include "inc/Helper/ThreadPool.h"
@@ -72,6 +72,7 @@ namespace SPTAG
             Index()
             {
                 m_workSpaceFactory = std::make_unique<SPTAG::COMMON::ThreadLocalWorkSpaceFactory<ExtraWorkSpace>>();
+                //m_workSpaceFactory = std::make_unique<SPTAG::COMMON::SharedPoolWorkSpaceFactory<ExtraWorkSpace>>();
                 m_fComputeDistance = std::function<float(const T*, const T*, DimensionType)>(COMMON::DistanceCalcSelector<T>(m_options.m_distCalcMethod));
                 m_iBaseSquare = (m_options.m_distCalcMethod == DistCalcMethod::Cosine) ? COMMON::Utils::GetBase<T>() * COMMON::Utils::GetBase<T>() : 1;
             }
@@ -83,7 +84,7 @@ namespace SPTAG
             inline Options* GetOptions() { return &m_options; }
 
             inline SizeType GetNumSamples() const { return m_versionMap.Count(); }
-            inline DimensionType GetFeatureDim() const { return m_pQuantizer ? m_pQuantizer->ReconstructDim() : m_index->GetFeatureDim(); }
+            inline DimensionType GetFeatureDim() const { return m_index->GetFeatureDim(); }
             inline SizeType GetValueSize() const { return m_options.m_dim * sizeof(T); }
 
             inline int GetCurrMaxCheck() const { return m_options.m_maxCheck; }

@@ -104,7 +104,12 @@ namespace SPTAG
 
             inline uint32_t runningJobs() { return currentJobs; }
 
-            inline bool allClear() { return currentJobs == 0 && jobsize() == 0; }
+            inline bool allClear() {
+                size_t totaljobs = jobsize();
+                if (totaljobs % 10000 == 0)
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "jobsize: %zu\n", totaljobs);
+                return currentJobs == 0 && totaljobs == 0; 
+            }
 
         protected:
             std::atomic_uint32_t currentJobs{ 0 };

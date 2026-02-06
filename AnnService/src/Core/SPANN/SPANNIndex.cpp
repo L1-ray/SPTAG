@@ -938,6 +938,7 @@ bool Index<T>::SelectHeadInternal(std::shared_ptr<Helper::VectorSetReader> &p_re
         bkt->m_iSamples = m_options.m_iSamples;
         bkt->m_iTreeNumber = m_options.m_iTreeNumber;
         bkt->m_fBalanceFactor = m_options.m_fBalanceFactor;
+        bkt->m_pQuantizer = m_pQuantizer;
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start invoking BuildTrees.\n");
         SPTAGLIB_LOG(
             Helper::LogLevel::LL_Info,
@@ -1387,18 +1388,22 @@ ErrorCode Index<T>::RefineIndex(const std::vector<std::shared_ptr<Helper::DiskIO
         new_versionMap.SetVersion(i, m_versionMap.GetVersion(NewtoOld[i]));
     new_versionMap.Save(m_options.m_indexDirectory + FolderSep + m_options.m_deleteIDFile);
 
-    if ((ret = m_extraSearcher->RefineIndex(m_index, false, &headOldtoNew, p_mapping)) != ErrorCode::Success)
-        return ret;
-
     if (nullptr != m_pMetadata)
     {
         if (p_indexStreams.size() < GetIndexFiles()->size() + 2)
             return ErrorCode::LackOfInputs;
         if ((ret = m_pMetadata->RefineMetadata(NewtoOld, p_indexStreams[GetIndexFiles()->size()],
-                                               p_indexStreams[GetIndexFiles()->size()+1])) !=
-            ErrorCode::Success)
+                                               p_indexStreams[GetIndexFiles()->size() + 1])) != ErrorCode::Success)
             return ret;
     }
+    for (int i = 0; i < p_indexStreams.size(); i++)
+    {
+        p_indexStreams[i]->ShutDown();
+    }
+
+    if ((ret = m_extraSearcher->RefineIndex(m_index, false, &headOldtoNew, p_mapping)) != ErrorCode::Success)
+        return ret;
+
     return ret;
 }
 
@@ -1553,13 +1558,17 @@ template <typename T>
 ErrorCode Index<T>::Check()
 {
     std::atomic<ErrorCode> ret = ErrorCode::Success;
+    while (!AllFinished())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
     //if ((ret = m_index->Check()) != ErrorCode::Success)
     //    return ret;
 
     std::vector<std::thread> mythreads;
     mythreads.reserve(m_options.m_iSSDNumberOfThreads);
     std::atomic_size_t sent(0);
-    std::vector<bool> checked(m_extraSearcher->GetNumBlocks(), false);
+    std::vector<std::uint8_t> checked(m_extraSearcher->GetNumBlocks(), false);
     for (int tid = 0; tid < m_options.m_iSSDNumberOfThreads; tid++)
     {
         mythreads.emplace_back([&, tid]() {
