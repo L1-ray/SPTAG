@@ -52,7 +52,11 @@ declare -A STAGE_NAMES=(
     ["search"]="SearchSSDIndex"
     ["warmup"]="Warmup"
     ["unknown"]="Unknown"
+    ["finished"]="Finished"
 )
+
+# 阶段顺序（用于判断阶段切换）
+STAGE_ORDER=("select_head" "build_head" "build_ssd" "warmup" "search" "finished")
 
 # ============ 帮助信息 ============
 usage() {
@@ -106,8 +110,13 @@ usage() {
 阶段识别关键词:
     SelectHead    - "Begin Select Head"
     BuildHead     - "Begin Build Head"
-    BuildSSDIndex - "Begin Build SSDIndex"
+    BuildSSDIndex - "Begin Build SSDIndex"（当 BuildSsdIndex=false 时跳过）
     SearchSSDIndex- "Start ANN Search", "Start warmup"
+
+阶段识别策略:
+    - 使用状态持久化：一旦检测到阶段开始标记，保持该阶段直到下一阶段开始
+    - 搜索模式检测：当 BuildSsdIndex=false 时，跳过 BuildSSDIndex 阶段
+    - 完成检测：检测到 "Finish ANN Search" 后进入 finished 状态
 EOF
     exit 0
 }
@@ -260,6 +269,13 @@ calculate_cpu_usage() {
 }
 
 # ============ 阶段识别 ============
+# 全局变量：记录已检测到的阶段开始标记（使用普通变量，更可靠）
+STAGE_SELECT_HEAD_STARTED=0
+STAGE_BUILD_HEAD_STARTED=0
+STAGE_BUILD_SSD_STARTED=0
+STAGE_WARMUP_STARTED=0
+STAGE_SEARCH_STARTED=0
+
 detect_stage() {
     local log_file="$1"
 
@@ -268,36 +284,73 @@ detect_stage() {
         return
     fi
 
-    # 读取最后100行日志
+    # 读取最近日志用于检测完成状态
     local recent_logs
-    recent_logs=$(tail -100 "$log_file" 2>/dev/null)
+    recent_logs=$(tail -50 "$log_file" 2>/dev/null)
 
-    # 按优先级检测阶段（后出现的阶段覆盖前面的）
-    local stage="unknown"
-
-    # 检测各阶段关键词
-    if echo "$recent_logs" | grep -q "Begin Select Head"; then
-        stage="select_head"
+    # 检测各阶段是否已开始（一旦开始就持久记录）
+    # 使用 grep -F 进行固定字符串匹配，更可靠
+    if [[ $STAGE_SELECT_HEAD_STARTED -eq 0 ]]; then
+        if grep -qF "Begin Select Head" "$log_file" 2>/dev/null; then
+            STAGE_SELECT_HEAD_STARTED=1
+        fi
     fi
-    if echo "$recent_logs" | grep -q "Begin Build Head"; then
-        stage="build_head"
+    if [[ $STAGE_BUILD_HEAD_STARTED -eq 0 ]]; then
+        if grep -qF "Begin Build Head" "$log_file" 2>/dev/null; then
+            STAGE_BUILD_HEAD_STARTED=1
+        fi
     fi
-    if echo "$recent_logs" | grep -q "Begin Build SSDIndex"; then
-        stage="build_ssd"
+    if [[ $STAGE_BUILD_SSD_STARTED -eq 0 ]]; then
+        if grep -qF "Begin Build SSDIndex" "$log_file" 2>/dev/null; then
+            STAGE_BUILD_SSD_STARTED=1
+        fi
     fi
-    if echo "$recent_logs" | grep -q "Start warmup"; then
-        stage="warmup"
+    if [[ $STAGE_WARMUP_STARTED -eq 0 ]]; then
+        if grep -qF "Start warmup" "$log_file" 2>/dev/null; then
+            STAGE_WARMUP_STARTED=1
+        fi
     fi
-    if echo "$recent_logs" | grep -q "Start ANN Search"; then
-        stage="search"
+    if [[ $STAGE_SEARCH_STARTED -eq 0 ]]; then
+        if grep -qF "Start ANN Search" "$log_file" 2>/dev/null; then
+            STAGE_SEARCH_STARTED=1
+        fi
     fi
 
     # 检测是否已完成
-    if echo "$recent_logs" | grep -q "Finish ANN Search\|测试完成"; then
-        stage="finished"
+    if echo "$recent_logs" | grep -qF "Finish ANN Search"; then
+        echo "finished"
+        return
     fi
 
-    echo "$stage"
+    # 检查是否是搜索模式（配置了 BuildSsdIndex=false 且有 Start ANN Search）
+    local is_search_only=false
+    if [[ $STAGE_SEARCH_STARTED -eq 1 ]] && grep -qF "BuildSsdIndex with value false" "$log_file" 2>/dev/null; then
+        is_search_only=true
+    fi
+
+    # 按阶段顺序确定当前阶段（最后一个已开始的阶段）
+    local current_stage="unknown"
+
+    if [[ $STAGE_SELECT_HEAD_STARTED -eq 1 ]]; then
+        current_stage="select_head"
+    fi
+    if [[ $STAGE_BUILD_HEAD_STARTED -eq 1 ]]; then
+        current_stage="build_head"
+    fi
+
+    # BuildSSDIndex 阶段：仅在非搜索模式下报告
+    if [[ $STAGE_BUILD_SSD_STARTED -eq 1 && "$is_search_only" == false ]]; then
+        current_stage="build_ssd"
+    fi
+
+    if [[ $STAGE_WARMUP_STARTED -eq 1 ]]; then
+        current_stage="warmup"
+    fi
+    if [[ $STAGE_SEARCH_STARTED -eq 1 ]]; then
+        current_stage="search"
+    fi
+
+    echo "$current_stage"
 }
 
 # ============ 阶段名称转换 ============
