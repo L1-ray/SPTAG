@@ -107,13 +107,17 @@ if (NOT LIBRARYONLY)
     file(GLOB SEARCHER_FILES ${AnnService}/src/IndexSearcher/*.cpp)
     add_executable (indexsearcher ${SEARCHER_FILES})
     target_link_libraries(indexsearcher ${Boost_LIBRARIES} SPTAGLibStatic)
-    
+
+    file(GLOB ONLINETEST_FILES ${AnnService}/src/OnlineTest/*.cpp)
+    add_executable (onlinetest ${ONLINETEST_FILES})
+    target_link_libraries(onlinetest ${Boost_LIBRARIES} SPTAGLibStatic)
+
     file(GLOB QUANTIZER_HDR_FILES ${AnnService}/inc/Quantizer/*.h)
     file(GLOB QUANTIZER_FILES ${AnnService}/src/Quantizer/*.cpp)
     add_executable (quantizer ${QUANTIZER_FILES} ${QUANTIZER_HDR_FILES})
     target_link_libraries(quantizer ${Boost_LIBRARIES} SPTAGLibStatic)
 
-    install(TARGETS server client aggregator indexbuilder indexsearcher quantizer
+    install(TARGETS server client aggregator indexbuilder indexsearcher onlinetest quantizer
       RUNTIME DESTINATION bin
       ARCHIVE DESTINATION lib
       LIBRARY DESTINATION lib)

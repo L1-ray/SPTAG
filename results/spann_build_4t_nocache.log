@@ -1,0 +1,679 @@
+========================================
+SPANN 索引性能测试监控
+========================================
+开始时间: 2026-04-13 19:31:30
+已清除缓存: 是
+
+========================================
+实验环境
+========================================
+内核版本: 6.17.0-20-generic
+操作系统: Ubuntu 24.04.4 LTS
+CPU: 
+CPU 核心数: 16
+内存总量: 
+磁盘信息:
+NAME      SIZE TYPE
+sda     931.5G disk
+nvme0n1 238.5G disk
+
+========================================
+实验配置
+========================================
+配置文件: /home/ray/code/SPTAG/spann_build_only.ini
+被测命令: /home/ray/code/SPTAG/Release/ssdserving /home/ray/code/SPTAG/spann_build_only.ini
+采样间隔: 1 秒
+监控磁盘: /media/ray/1tb (sda)
+索引目录: /media/ray/1tb/sift1m/spann_index
+
+[1] Using AVX2 InstructionSet!
+[1] Set QuantizerFile = 
+[1] Setting Dim with value 128
+[1] Setting DistCalcMethod with value L2
+[1] Setting IndexAlgoType with value BKT
+[1] Setting IndexDirectory with value /media/ray/1tb/sift1m/spann_index
+[1] Setting QueryPath with value /media/ray/1tb/sift1m/sift_query.fvecs
+[1] Setting QueryType with value XVEC
+[1] Setting TruthPath with value /media/ray/1tb/sift1m/sift_groundtruth.ivecs
+[1] Setting TruthType with value XVEC
+[1] Setting ValueType with value Float
+[1] Setting VectorPath with value /media/ray/1tb/sift1m/sift_base.fvecs
+[1] Setting VectorType with value XVEC
+[1] Setting isExecute with value true
+[1] Setting BuildSsdIndex with value true
+[1] Setting InternalResultNum with value 64
+[1] Setting isExecute with value true
+[1] Setting MaxCheck with value 2048
+[1] Setting NumberOfThreads with value 1
+[1] Setting PostingPageLimit with value 12
+[1] Setting ReplicaCount with value 8
+[1] Setting TmpDir with value /tmp/
+[1] Setting BKTKmeansK with value 32
+[1] Setting BKTLeafSize with value 8
+[1] Setting isExecute with value true
+[1] Setting NumberOfThreads with value 4
+[1] Setting Ratio with value 0.16
+[1] Setting SamplesNumber with value 1000
+[1] Setting SaveBKT with value false
+[1] Setting SelectThreshold with value 50
+[1] Setting SplitFactor with value 6
+[1] Setting SplitThreshold with value 100
+[1] Setting TreeNumber with value 1
+[1] Begin Select Head...
+[1] Begin initial data (1000000,128)...
+[1] Begin Adjust Parameters...
+[1] Start generating BKT.
+[1] Start invoking BuildTrees.
+[1] BKTKmeansK: 32, BKTLeafSize: 8, Samples: 1000, BKTLambdaFactor:-1.000000 TreeNumber: 1, ThreadNum: 4.
+[1] KmeansArgs: Using none quantizer!
+[1] Lambda:min(1,79.3501) Max:64912 Min:7520 Avg:31250.000000 Std/Avg:0.408869 Dist:96193970176.000000 NonZero/Total:32/32
+[1] Lambda:min(0.1,105.287) Max:84158 Min:8245 Avg:31250.000000 Std/Avg:0.509135 Dist:95145230336.000000 NonZero/Total:32/32
+[1] Lambda:min(0.01,77.2692) Max:53634 Min:1474 Avg:31250.000000 Std/Avg:0.386149 Dist:95666610176.000000 NonZero/Total:32/32
+[1] Lambda:min(0.001,102.738) Max:59797 Min:9243 Avg:31250.000000 Std/Avg:0.442850 Dist:94434852864.000000 NonZero/Total:32/32
+[1] Lambda:min(0.0001,97.1696) Max:55219 Min:10952 Avg:31250.000000 Std/Avg:0.389762 Dist:95180439552.000000 NonZero/Total:32/32
+[1] Lambda:min(1e-05,112.123) Max:64339 Min:7648 Avg:31250.000000 Std/Avg:0.465524 Dist:95249776640.000000 NonZero/Total:32/32
+[1] Lambda:min(1e-06,97.8096) Max:61900 Min:3357 Avg:31250.000000 Std/Avg:0.405989 Dist:94718771200.000000 NonZero/Total:32/32
+[1] Best Lambda Factor:0.100000
+[1] Start to build BKTree 1
+[1] Lambda:min(0.01,82.5239) Max:52462 Min:9484 Avg:31250.000000 Std/Avg:0.298187 Dist:95092858880.000000 NonZero/Total:32/32
+[1] Lambda:min(0.01,43.2832) Max:3561 Min:0 Avg:1639.406250 Std/Avg:0.626757 Dist:2859665920.000000 NonZero/Total:28/32
+[1] Lambda:min(0.01,40.2894) Max:264 Min:0 Avg:111.250000 Std/Avg:0.552663 Dist:139480544.000000 NonZero/Total:30/32
+[1] Lambda:min(0.0380228,153.132) Max:37 Min:1 Avg:8.218750 Std/Avg:1.114211 Dist:5587148.000000 NonZero/Total:32/32
+[1] Lambda:min(0.277778,551.332) Max:13 Min:1 Avg:7.200000 Std/Avg:0.641901 Dist:712024.000000 NonZero/Total:5/5
+[1] Lambda:min(0.833333,1102.27) Max:11 Min:1 Avg:6.000000 Std/Avg:0.833333 Dist:264680.000000 NonZero/Total:2/2
+[1] Lambda:min(1,974.733) Max:6 Min:4 Avg:5.000000 Std/Avg:0.200000 Dist:216844.000000 NonZero/Total:2/2
+[1] 1 BKTree built, 1000002 1000000
+[1] End invoking BuildTrees.
+[1] Invoking BuildTrees used time: 0.63 minutes (about 0.01 hours).
+[1] Finish generating BKT.
+[1] Start selecting nodes...Select Head Dynamically...
+[1] Select Threshold: 2, Split Threshold: 53, diff: 5.40%.
+[1] Select Threshold: 2, Split Threshold: 76, diff: 5.40%.
+[1] Select Threshold: 2, Split Threshold: 88, diff: 5.40%.
+[1] Select Threshold: 2, Split Threshold: 94, diff: 5.40%.
+[1] Select Threshold: 2, Split Threshold: 97, diff: 5.40%.
+[1] Select Threshold: 2, Split Threshold: 98, diff: 5.40%.
+[1] Select Threshold: 2, Split Threshold: 99, diff: 5.40%.
+[1] Select Threshold: 3, Split Threshold: 53, diff: 2.36%.
+[1] Select Threshold: 3, Split Threshold: 76, diff: 2.36%.
+[1] Select Threshold: 3, Split Threshold: 88, diff: 2.36%.
+[1] Select Threshold: 3, Split Threshold: 94, diff: 2.36%.
+[1] Select Threshold: 3, Split Threshold: 97, diff: 2.36%.
+[1] Select Threshold: 3, Split Threshold: 98, diff: 2.36%.
+[1] Select Threshold: 3, Split Threshold: 99, diff: 2.36%.
+[1] Select Threshold: 4, Split Threshold: 53, diff: -0.14%.
+[1] Select Threshold: 4, Split Threshold: 29, diff: -0.01%.
+[1] Select Threshold: 4, Split Threshold: 17, diff: 0.44%.
+[1] Select Threshold: 4, Split Threshold: 23, diff: 0.16%.
+[1] Select Threshold: 4, Split Threshold: 26, diff: 0.07%.
+[1] Select Threshold: 4, Split Threshold: 27, diff: 0.04%.
+[1] Select Threshold: 4, Split Threshold: 28, diff: 0.02%.
+[1] Select Threshold: 5, Split Threshold: 53, diff: -2.35%.
+[1] Select Threshold: 5, Split Threshold: 29, diff: -1.89%.
+[1] Select Threshold: 5, Split Threshold: 17, diff: -1.07%.
+[1] Select Threshold: 5, Split Threshold: 11, diff: 0.08%.
+[1] Select Threshold: 5, Split Threshold: 14, diff: -0.65%.
+[1] Select Threshold: 5, Split Threshold: 12, diff: -0.16%.
+[1] Select Threshold: 6, Split Threshold: 53, diff: -4.42%.
+[1] Select Threshold: 6, Split Threshold: 29, diff: -3.63%.
+[1] Select Threshold: 6, Split Threshold: 17, diff: -2.20%.
+[1] Select Threshold: 6, Split Threshold: 11, diff: -0.38%.
+[1] Select Threshold: 6, Split Threshold: 8, diff: 5.01%.
+[1] Select Threshold: 6, Split Threshold: 9, diff: 1.53%.
+[1] Select Threshold: 6, Split Threshold: 10, diff: 0.31%.
+[1] Select Threshold: 7, Split Threshold: 53, diff: -5.98%.
+[1] Select Threshold: 7, Split Threshold: 29, diff: -4.75%.
+[1] Select Threshold: 7, Split Threshold: 17, diff: -2.71%.
+[1] Select Threshold: 7, Split Threshold: 11, diff: -0.04%.
+[1] Select Threshold: 7, Split Threshold: 8, diff: 6.41%.
+[1] Select Threshold: 7, Split Threshold: 9, diff: 2.96%.
+[1] Select Threshold: 7, Split Threshold: 10, diff: 1.13%.
+[1] Select Threshold: 8, Split Threshold: 53, diff: -7.10%.
+[1] Select Threshold: 8, Split Threshold: 29, diff: -5.47%.
+[1] Select Threshold: 8, Split Threshold: 17, diff: -2.79%.
+[1] Select Threshold: 8, Split Threshold: 11, diff: 0.77%.
+[1] Select Threshold: 8, Split Threshold: 14, diff: -1.59%.
+[1] Select Threshold: 8, Split Threshold: 12, diff: -0.24%.
+[1] Select Threshold: 9, Split Threshold: 53, diff: -7.91%.
+[1] Select Threshold: 9, Split Threshold: 29, diff: -5.86%.
+[1] Select Threshold: 9, Split Threshold: 17, diff: -2.62%.
+[1] Select Threshold: 9, Split Threshold: 11, diff: 1.78%.
+[1] Select Threshold: 9, Split Threshold: 14, diff: -1.08%.
+[1] Select Threshold: 9, Split Threshold: 12, diff: 0.56%.
+[1] Select Threshold: 9, Split Threshold: 13, diff: -0.40%.
+[1] Select Threshold: 10, Split Threshold: 53, diff: -8.42%.
+[1] Select Threshold: 10, Split Threshold: 29, diff: -5.95%.
+[1] Select Threshold: 10, Split Threshold: 17, diff: -2.17%.
+[1] Select Threshold: 10, Split Threshold: 11, diff: 2.88%.
+[1] Select Threshold: 10, Split Threshold: 14, diff: -0.43%.
+[1] Select Threshold: 10, Split Threshold: 12, diff: 1.47%.
+[1] Select Threshold: 10, Split Threshold: 13, diff: 0.36%.
+[1] Select Threshold: 11, Split Threshold: 53, diff: -8.71%.
+[1] Select Threshold: 11, Split Threshold: 29, diff: -5.87%.
+[1] Select Threshold: 11, Split Threshold: 17, diff: -1.64%.
+[1] Select Threshold: 11, Split Threshold: 11, diff: 4.05%.
+[1] Select Threshold: 11, Split Threshold: 14, diff: 0.27%.
+[1] Select Threshold: 11, Split Threshold: 15, diff: -0.39%.
+[1] Select Threshold: 12, Split Threshold: 53, diff: -8.95%.
+[1] Select Threshold: 12, Split Threshold: 29, diff: -5.67%.
+[1] Select Threshold: 12, Split Threshold: 17, diff: -1.07%.
+[1] Select Threshold: 12, Split Threshold: 11, diff: 4.95%.
+[1] Select Threshold: 12, Split Threshold: 14, diff: 0.96%.
+[1] Select Threshold: 12, Split Threshold: 15, diff: 0.26%.
+[1] Select Threshold: 12, Split Threshold: 16, diff: -0.27%.
+[1] Select Threshold: 13, Split Threshold: 53, diff: -9.01%.
+[1] Select Threshold: 13, Split Threshold: 29, diff: -5.43%.
+[1] Select Threshold: 13, Split Threshold: 17, diff: -0.56%.
+[1] Select Threshold: 13, Split Threshold: 11, diff: 4.08%.
+[1] Select Threshold: 13, Split Threshold: 14, diff: 1.63%.
+[1] Select Threshold: 13, Split Threshold: 15, diff: 0.86%.
+[1] Select Threshold: 13, Split Threshold: 16, diff: 0.27%.
+[1] Select Threshold: 14, Split Threshold: 53, diff: -9.03%.
+[1] Select Threshold: 14, Split Threshold: 29, diff: -5.12%.
+[1] Select Threshold: 14, Split Threshold: 17, diff: -0.07%.
+[1] Select Threshold: 14, Split Threshold: 11, diff: 3.33%.
+[1] Select Threshold: 14, Split Threshold: 14, diff: 2.27%.
+[1] Select Threshold: 14, Split Threshold: 15, diff: 1.42%.
+[1] Select Threshold: 14, Split Threshold: 16, diff: 0.77%.
+[1] Select Threshold: 15, Split Threshold: 53, diff: -8.97%.
+[1] Select Threshold: 15, Split Threshold: 29, diff: -4.87%.
+[1] Select Threshold: 15, Split Threshold: 17, diff: 0.36%.
+[1] Select Threshold: 15, Split Threshold: 23, diff: -2.90%.
+[1] Select Threshold: 15, Split Threshold: 20, diff: -1.66%.
+[1] Select Threshold: 15, Split Threshold: 18, diff: -0.41%.
+[1] Select Threshold: 16, Split Threshold: 53, diff: -8.88%.
+[1] Select Threshold: 16, Split Threshold: 29, diff: -4.58%.
+[1] Select Threshold: 16, Split Threshold: 17, diff: 0.76%.
+[1] Select Threshold: 16, Split Threshold: 23, diff: -2.57%.
+[1] Select Threshold: 16, Split Threshold: 20, diff: -1.29%.
+[1] Select Threshold: 16, Split Threshold: 18, diff: -0.01%.
+[1] Select Threshold: 17, Split Threshold: 53, diff: -8.77%.
+[1] Select Threshold: 17, Split Threshold: 29, diff: -4.32%.
+[1] Select Threshold: 17, Split Threshold: 17, diff: 1.05%.
+[1] Select Threshold: 17, Split Threshold: 23, diff: -2.30%.
+[1] Select Threshold: 17, Split Threshold: 20, diff: -0.99%.
+[1] Select Threshold: 17, Split Threshold: 18, diff: 0.30%.
+[1] Select Threshold: 17, Split Threshold: 19, diff: -0.40%.
+[1] Select Threshold: 18, Split Threshold: 53, diff: -8.66%.
+[1] Select Threshold: 18, Split Threshold: 29, diff: -4.08%.
+[1] Select Threshold: 18, Split Threshold: 17, diff: 1.30%.
+[1] Select Threshold: 18, Split Threshold: 23, diff: -2.05%.
+[1] Select Threshold: 18, Split Threshold: 20, diff: -0.72%.
+[1] Select Threshold: 18, Split Threshold: 18, diff: 0.55%.
+[1] Select Threshold: 18, Split Threshold: 19, diff: -0.13%.
+[1] Select Threshold: 19, Split Threshold: 53, diff: -8.53%.
+[1] Select Threshold: 19, Split Threshold: 29, diff: -3.90%.
+[1] Select Threshold: 19, Split Threshold: 17, diff: 0.78%.
+[1] Select Threshold: 19, Split Threshold: 23, diff: -1.81%.
+[1] Select Threshold: 19, Split Threshold: 20, diff: -0.47%.
+[1] Select Threshold: 19, Split Threshold: 18, diff: 0.78%.
+[1] Select Threshold: 19, Split Threshold: 19, diff: 0.11%.
+[1] Select Threshold: 20, Split Threshold: 53, diff: -8.40%.
+[1] Select Threshold: 20, Split Threshold: 29, diff: -3.71%.
+[1] Select Threshold: 20, Split Threshold: 17, diff: 0.30%.
+[1] Select Threshold: 20, Split Threshold: 23, diff: -1.59%.
+[1] Select Threshold: 20, Split Threshold: 20, diff: -0.27%.
+[1] Select Threshold: 20, Split Threshold: 18, diff: 0.30%.
+[1] Select Threshold: 20, Split Threshold: 19, diff: 0.30%.
+[1] Select Threshold: 21, Split Threshold: 53, diff: -8.31%.
+[1] Select Threshold: 21, Split Threshold: 29, diff: -3.54%.
+[1] Select Threshold: 21, Split Threshold: 17, diff: -0.09%.
+[1] Select Threshold: 21, Split Threshold: 11, diff: -0.09%.
+[1] Select Threshold: 21, Split Threshold: 8, diff: -0.09%.
+[1] Select Threshold: 21, Split Threshold: 7, diff: -0.09%.
+[1] Select Threshold: 22, Split Threshold: 53, diff: -8.18%.
+[1] Select Threshold: 22, Split Threshold: 29, diff: -3.40%.
+[1] Select Threshold: 22, Split Threshold: 17, diff: -0.44%.
+[1] Select Threshold: 22, Split Threshold: 11, diff: -0.44%.
+[1] Select Threshold: 22, Split Threshold: 8, diff: -0.44%.
+[1] Select Threshold: 22, Split Threshold: 7, diff: -0.44%.
+[1] Select Threshold: 23, Split Threshold: 53, diff: -8.10%.
+[1] Select Threshold: 23, Split Threshold: 29, diff: -3.25%.
+[1] Select Threshold: 23, Split Threshold: 17, diff: -0.74%.
+[1] Select Threshold: 23, Split Threshold: 11, diff: -0.74%.
+[1] Select Threshold: 23, Split Threshold: 8, diff: -0.74%.
+[1] Select Threshold: 23, Split Threshold: 7, diff: -0.74%.
+[1] Select Threshold: 24, Split Threshold: 53, diff: -8.01%.
+[1] Select Threshold: 24, Split Threshold: 29, diff: -3.12%.
+[1] Select Threshold: 24, Split Threshold: 17, diff: -1.02%.
+[1] Select Threshold: 24, Split Threshold: 11, diff: -1.02%.
+[1] Select Threshold: 24, Split Threshold: 8, diff: -1.02%.
+[1] Select Threshold: 24, Split Threshold: 7, diff: -1.02%.
+[1] Select Threshold: 25, Split Threshold: 53, diff: -7.93%.
+[1] Select Threshold: 25, Split Threshold: 29, diff: -3.01%.
+[1] Select Threshold: 25, Split Threshold: 17, diff: -1.26%.
+[1] Select Threshold: 25, Split Threshold: 11, diff: -1.26%.
+[1] Select Threshold: 25, Split Threshold: 8, diff: -1.26%.
+[1] Select Threshold: 25, Split Threshold: 7, diff: -1.26%.
+[1] Select Threshold: 26, Split Threshold: 53, diff: -7.86%.
+[1] Select Threshold: 26, Split Threshold: 29, diff: -2.91%.
+[1] Select Threshold: 26, Split Threshold: 17, diff: -1.58%.
+[1] Select Threshold: 26, Split Threshold: 11, diff: -1.58%.
+[1] Select Threshold: 26, Split Threshold: 8, diff: -1.58%.
+[1] Select Threshold: 26, Split Threshold: 7, diff: -1.58%.
+[1] Select Threshold: 27, Split Threshold: 53, diff: -7.79%.
+[1] Select Threshold: 27, Split Threshold: 29, diff: -2.82%.
+[1] Select Threshold: 27, Split Threshold: 17, diff: -1.88%.
+[1] Select Threshold: 27, Split Threshold: 11, diff: -1.88%.
+[1] Select Threshold: 27, Split Threshold: 8, diff: -1.88%.
+[1] Select Threshold: 27, Split Threshold: 7, diff: -1.88%.
+[1] Select Threshold: 28, Split Threshold: 53, diff: -7.74%.
+[1] Select Threshold: 28, Split Threshold: 29, diff: -2.75%.
+[1] Select Threshold: 28, Split Threshold: 17, diff: -2.15%.
+[1] Select Threshold: 28, Split Threshold: 11, diff: -2.15%.
+[1] Select Threshold: 28, Split Threshold: 8, diff: -2.15%.
+[1] Select Threshold: 28, Split Threshold: 7, diff: -2.15%.
+[1] Select Threshold: 29, Split Threshold: 53, diff: -7.69%.
+[1] Select Threshold: 29, Split Threshold: 29, diff: -2.68%.
+[1] Select Threshold: 29, Split Threshold: 17, diff: -2.41%.
+[1] Select Threshold: 29, Split Threshold: 11, diff: -2.41%.
+[1] Select Threshold: 29, Split Threshold: 8, diff: -2.41%.
+[1] Select Threshold: 29, Split Threshold: 7, diff: -2.41%.
+[1] Select Threshold: 30, Split Threshold: 53, diff: -7.64%.
+[1] Select Threshold: 30, Split Threshold: 29, diff: -2.63%.
+[1] Select Threshold: 30, Split Threshold: 17, diff: -2.63%.
+[1] Select Threshold: 30, Split Threshold: 11, diff: -2.63%.
+[1] Select Threshold: 30, Split Threshold: 8, diff: -2.63%.
+[1] Select Threshold: 30, Split Threshold: 7, diff: -2.63%.
+[1] Select Threshold: 31, Split Threshold: 53, diff: -7.59%.
+[1] Select Threshold: 31, Split Threshold: 29, diff: -2.86%.
+[1] Select Threshold: 31, Split Threshold: 17, diff: -2.86%.
+[1] Select Threshold: 31, Split Threshold: 11, diff: -2.86%.
+[1] Select Threshold: 31, Split Threshold: 8, diff: -2.86%.
+[1] Select Threshold: 31, Split Threshold: 7, diff: -2.86%.
+[1] Select Threshold: 32, Split Threshold: 53, diff: -7.54%.
+[1] Select Threshold: 32, Split Threshold: 29, diff: -3.09%.
+[1] Select Threshold: 32, Split Threshold: 17, diff: -3.09%.
+[1] Select Threshold: 32, Split Threshold: 11, diff: -3.09%.
+[1] Select Threshold: 32, Split Threshold: 8, diff: -3.09%.
+[1] Select Threshold: 32, Split Threshold: 7, diff: -3.09%.
+[1] Select Threshold: 33, Split Threshold: 53, diff: -7.50%.
+[1] Select Threshold: 33, Split Threshold: 29, diff: -3.27%.
+[1] Select Threshold: 33, Split Threshold: 17, diff: -3.27%.
+[1] Select Threshold: 33, Split Threshold: 11, diff: -3.27%.
+[1] Select Threshold: 33, Split Threshold: 8, diff: -3.27%.
+[1] Select Threshold: 33, Split Threshold: 7, diff: -3.27%.
+[1] Select Threshold: 34, Split Threshold: 53, diff: -7.47%.
+[1] Select Threshold: 34, Split Threshold: 29, diff: -3.51%.
+[1] Select Threshold: 34, Split Threshold: 17, diff: -3.51%.
+[1] Select Threshold: 34, Split Threshold: 11, diff: -3.51%.
+[1] Select Threshold: 34, Split Threshold: 8, diff: -3.51%.
+[1] Select Threshold: 34, Split Threshold: 7, diff: -3.51%.
+[1] Select Threshold: 35, Split Threshold: 53, diff: -7.43%.
+[1] Select Threshold: 35, Split Threshold: 29, diff: -3.73%.
+[1] Select Threshold: 35, Split Threshold: 17, diff: -3.73%.
+[1] Select Threshold: 35, Split Threshold: 11, diff: -3.73%.
+[1] Select Threshold: 35, Split Threshold: 8, diff: -3.73%.
+[1] Select Threshold: 35, Split Threshold: 7, diff: -3.73%.
+[1] Select Threshold: 36, Split Threshold: 53, diff: -7.40%.
+[1] Select Threshold: 36, Split Threshold: 29, diff: -3.97%.
+[1] Select Threshold: 36, Split Threshold: 17, diff: -3.97%.
+[1] Select Threshold: 36, Split Threshold: 11, diff: -3.97%.
+[1] Select Threshold: 36, Split Threshold: 8, diff: -3.97%.
+[1] Select Threshold: 36, Split Threshold: 7, diff: -3.97%.
+[1] Select Threshold: 37, Split Threshold: 53, diff: -7.37%.
+[1] Select Threshold: 37, Split Threshold: 29, diff: -4.19%.
+[1] Select Threshold: 37, Split Threshold: 17, diff: -4.19%.
+[1] Select Threshold: 37, Split Threshold: 11, diff: -4.19%.
+[1] Select Threshold: 37, Split Threshold: 8, diff: -4.19%.
+[1] Select Threshold: 37, Split Threshold: 7, diff: -4.19%.
+[1] Select Threshold: 38, Split Threshold: 53, diff: -7.33%.
+[1] Select Threshold: 38, Split Threshold: 29, diff: -4.40%.
+[1] Select Threshold: 38, Split Threshold: 17, diff: -4.40%.
+[1] Select Threshold: 38, Split Threshold: 11, diff: -4.40%.
+[1] Select Threshold: 38, Split Threshold: 8, diff: -4.40%.
+[1] Select Threshold: 38, Split Threshold: 7, diff: -4.40%.
+[1] Select Threshold: 39, Split Threshold: 53, diff: -7.31%.
+[1] Select Threshold: 39, Split Threshold: 29, diff: -4.59%.
+[1] Select Threshold: 39, Split Threshold: 17, diff: -4.59%.
+[1] Select Threshold: 39, Split Threshold: 11, diff: -4.59%.
+[1] Select Threshold: 39, Split Threshold: 8, diff: -4.59%.
+[1] Select Threshold: 39, Split Threshold: 7, diff: -4.59%.
+[1] Select Threshold: 40, Split Threshold: 53, diff: -7.29%.
+[1] Select Threshold: 40, Split Threshold: 29, diff: -4.78%.
+[1] Select Threshold: 40, Split Threshold: 17, diff: -4.78%.
+[1] Select Threshold: 40, Split Threshold: 11, diff: -4.78%.
+[1] Select Threshold: 40, Split Threshold: 8, diff: -4.78%.
+[1] Select Threshold: 40, Split Threshold: 7, diff: -4.78%.
+[1] Select Threshold: 41, Split Threshold: 53, diff: -7.27%.
+[1] Select Threshold: 41, Split Threshold: 29, diff: -4.96%.
+[1] Select Threshold: 41, Split Threshold: 17, diff: -4.96%.
+[1] Select Threshold: 41, Split Threshold: 11, diff: -4.96%.
+[1] Select Threshold: 41, Split Threshold: 8, diff: -4.96%.
+[1] Select Threshold: 41, Split Threshold: 7, diff: -4.96%.
+[1] Select Threshold: 42, Split Threshold: 53, diff: -7.25%.
+[1] Select Threshold: 42, Split Threshold: 29, diff: -5.16%.
+[1] Select Threshold: 42, Split Threshold: 17, diff: -5.16%.
+[1] Select Threshold: 42, Split Threshold: 11, diff: -5.16%.
+[1] Select Threshold: 42, Split Threshold: 8, diff: -5.16%.
+[1] Select Threshold: 42, Split Threshold: 7, diff: -5.16%.
+[1] Select Threshold: 43, Split Threshold: 53, diff: -7.23%.
+[1] Select Threshold: 43, Split Threshold: 29, diff: -5.36%.
+[1] Select Threshold: 43, Split Threshold: 17, diff: -5.36%.
+[1] Select Threshold: 43, Split Threshold: 11, diff: -5.36%.
+[1] Select Threshold: 43, Split Threshold: 8, diff: -5.36%.
+[1] Select Threshold: 43, Split Threshold: 7, diff: -5.36%.
+[1] Select Threshold: 44, Split Threshold: 53, diff: -7.21%.
+[1] Select Threshold: 44, Split Threshold: 29, diff: -5.54%.
+[1] Select Threshold: 44, Split Threshold: 17, diff: -5.54%.
+[1] Select Threshold: 44, Split Threshold: 11, diff: -5.54%.
+[1] Select Threshold: 44, Split Threshold: 8, diff: -5.54%.
+[1] Select Threshold: 44, Split Threshold: 7, diff: -5.54%.
+[1] Select Threshold: 45, Split Threshold: 53, diff: -7.20%.
+[1] Select Threshold: 45, Split Threshold: 29, diff: -5.74%.
+[1] Select Threshold: 45, Split Threshold: 17, diff: -5.74%.
+[1] Select Threshold: 45, Split Threshold: 11, diff: -5.74%.
+[1] Select Threshold: 45, Split Threshold: 8, diff: -5.74%.
+[1] Select Threshold: 45, Split Threshold: 7, diff: -5.74%.
+[1] Select Threshold: 46, Split Threshold: 53, diff: -7.18%.
+[1] Select Threshold: 46, Split Threshold: 29, diff: -5.91%.
+[1] Select Threshold: 46, Split Threshold: 17, diff: -5.91%.
+[1] Select Threshold: 46, Split Threshold: 11, diff: -5.91%.
+[1] Select Threshold: 46, Split Threshold: 8, diff: -5.91%.
+[1] Select Threshold: 46, Split Threshold: 7, diff: -5.91%.
+[1] Select Threshold: 47, Split Threshold: 53, diff: -7.17%.
+[1] Select Threshold: 47, Split Threshold: 29, diff: -6.08%.
+[1] Select Threshold: 47, Split Threshold: 17, diff: -6.08%.
+[1] Select Threshold: 47, Split Threshold: 11, diff: -6.08%.
+[1] Select Threshold: 47, Split Threshold: 8, diff: -6.08%.
+[1] Select Threshold: 47, Split Threshold: 7, diff: -6.08%.
+[1] Select Threshold: 48, Split Threshold: 53, diff: -7.16%.
+[1] Select Threshold: 48, Split Threshold: 29, diff: -6.21%.
+[1] Select Threshold: 48, Split Threshold: 17, diff: -6.21%.
+[1] Select Threshold: 48, Split Threshold: 11, diff: -6.21%.
+[1] Select Threshold: 48, Split Threshold: 8, diff: -6.21%.
+[1] Select Threshold: 48, Split Threshold: 7, diff: -6.21%.
+[1] Select Threshold: 49, Split Threshold: 53, diff: -7.15%.
+[1] Select Threshold: 49, Split Threshold: 29, diff: -6.36%.
+[1] Select Threshold: 49, Split Threshold: 17, diff: -6.36%.
+[1] Select Threshold: 49, Split Threshold: 11, diff: -6.36%.
+[1] Select Threshold: 49, Split Threshold: 8, diff: -6.36%.
+[1] Select Threshold: 49, Split Threshold: 7, diff: -6.36%.
+[1] Select Threshold: 50, Split Threshold: 53, diff: -7.15%.
+[1] Select Threshold: 50, Split Threshold: 29, diff: -6.51%.
+[1] Select Threshold: 50, Split Threshold: 17, diff: -6.51%.
+[1] Select Threshold: 50, Split Threshold: 11, diff: -6.51%.
+[1] Select Threshold: 50, Split Threshold: 8, diff: -6.51%.
+[1] Select Threshold: 50, Split Threshold: 7, diff: -6.51%.
+[1] Final Select Threshold: 4, Split Threshold: 29.
+[1] Seleted Nodes: 159900, about 15.99% of total.
+[1] Total used time: 0.78 minutes (about 0.01 hours).
+[1] select head time: 47.00s
+[1] Begin Build Head...
+[1] Setting DistCalcMethod with value L2
+[1] Setting TPTNumber with value 32
+[1] Setting TPTLeafSize with value 2000
+[1] Setting RefineIterations with value 3
+[1] Setting NumberOfThreads with value 4
+[1] Setting NeighborhoodSize with value 32
+[1] Setting MaxCheckForRefineGraph with value 8192
+[1] Setting MaxCheck with value 8192
+[1] Load Vector(159900,128)
+[1] Begin build index...
+[1] KmeansArgs: Using none quantizer!
+[1] Start to build BKTree 1
+[1] Lambda:min(1e-05,98.5527) Max:10028 Min:1563 Avg:4996.875000 Std/Avg:0.447414 Dist:14049564672.000000 NonZero/Total:32/32
+[1] Lambda:min(1e-05,68.6663) Max:627 Min:44 Avg:313.343750 Std/Avg:0.498051 Dist:581008896.000000 NonZero/Total:32/32
+[1] Lambda:min(1.59744e-05,66.7458) Max:84 Min:1 Avg:19.562500 Std/Avg:0.859080 Dist:20648624.000000 NonZero/Total:32/32
+[1] Lambda:min(0.000120482,294.448) Max:14 Min:1 Avg:2.593750 Std/Avg:1.089879 Dist:1413543.000000 NonZero/Total:32/32
+[1] Lambda:min(0.000769231,1050.92) Max:1 Min:0 Avg:0.406250 Std/Avg:1.208941 Dist:0.000000 NonZero/Total:13/32
+[1] 1 BKTree built, 159902 159900
+[1] Build Tree time (s): 3
+[1] build RNG graph!
+[1] Parallel TpTree Partition begin
+[1] Finish Getting Leaves for Tree 0
+[1] Finish Getting Leaves for Tree 1
+[1] Finish Getting Leaves for Tree 2
+[1] Finish Getting Leaves for Tree 3
+[1] Finish Getting Leaves for Tree 4
+[1] Finish Getting Leaves for Tree 5
+[1] Finish Getting Leaves for Tree 6
+[1] Finish Getting Leaves for Tree 7
+[1] Finish Getting Leaves for Tree 8
+[1] Finish Getting Leaves for Tree 9
+[1] Finish Getting Leaves for Tree 10
+[1] Finish Getting Leaves for Tree 11
+[1] Finish Getting Leaves for Tree 12
+[1] Finish Getting Leaves for Tree 13
+[1] Finish Getting Leaves for Tree 14
+[1] Finish Getting Leaves for Tree 15
+[1] Finish Getting Leaves for Tree 16
+[1] Finish Getting Leaves for Tree 17
+[1] Finish Getting Leaves for Tree 18
+[1] Finish Getting Leaves for Tree 19
+[1] Finish Getting Leaves for Tree 20
+[1] Finish Getting Leaves for Tree 21
+[1] Finish Getting Leaves for Tree 22
+[1] Finish Getting Leaves for Tree 23
+[1] Finish Getting Leaves for Tree 24
+[1] Finish Getting Leaves for Tree 25
+[1] Finish Getting Leaves for Tree 26
+[1] Finish Getting Leaves for Tree 27
+[1] Finish Getting Leaves for Tree 28
+[1] Finish Getting Leaves for Tree 29
+[1] Finish Getting Leaves for Tree 30
+[1] Finish Getting Leaves for Tree 31
+[1] Parallel TpTree Partition done
+[1] Build TPTree time (s): 15
+[1] Processing Tree 0 0%
+[1] Processing Tree 1 0%
+[1] Processing Tree 2 0%
+[1] Processing Tree 3 0%
+[1] Processing Tree 4 0%
+[1] Processing Tree 5 0%
+[1] Processing Tree 5 20%
+[1] Processing Tree 5 40%
+[1] Processing Tree 5 60%
+[1] Processing Tree 5 80%
+[1] Processing Tree 6 0%
+[1] Processing Tree 7 0%
+[1] Processing Tree 7 20%
+[1] Processing Tree 7 40%
+[1] Processing Tree 7 60%
+[1] Processing Tree 7 80%
+[1] Processing Tree 8 0%
+[1] Processing Tree 9 0%
+[1] Processing Tree 10 0%
+[1] Processing Tree 10 20%
+[1] Processing Tree 10 40%
+[1] Processing Tree 10 60%
+[1] Processing Tree 10 80%
+[1] Processing Tree 11 0%
+[1] Processing Tree 12 0%
+[1] Processing Tree 12 20%
+[1] Processing Tree 12 40%
+[1] Processing Tree 12 60%
+[1] Processing Tree 12 80%
+[1] Processing Tree 13 0%
+[1] Processing Tree 14 0%
+[1] Processing Tree 15 0%
+[1] Processing Tree 16 0%
+[1] Processing Tree 17 0%
+[1] Processing Tree 18 0%
+[1] Processing Tree 19 0%
+[1] Processing Tree 20 0%
+[1] Processing Tree 21 0%
+[1] Processing Tree 22 0%
+[1] Processing Tree 23 0%
+[1] Processing Tree 24 0%
+[1] Processing Tree 25 0%
+[1] Processing Tree 26 0%
+[1] Processing Tree 27 0%
+[1] Processing Tree 27 20%
+[1] Processing Tree 27 40%
+[1] Processing Tree 27 60%
+[1] Processing Tree 27 80%
+[1] Processing Tree 28 0%
+[1] Processing Tree 29 0%
+[1] Processing Tree 29 20%
+[1] Processing Tree 29 40%
+[1] Processing Tree 29 60%
+[1] Processing Tree 29 80%
+[1] Processing Tree 30 0%
+[1] Processing Tree 30 20%
+[1] Processing Tree 30 40%
+[1] Processing Tree 30 60%
+[1] Processing Tree 30 80%
+[1] Processing Tree 31 0%
+[1] Process TPTree time (s): 45
+[1] BuildInitKNNGraph time (s): 60
+[1] Refine 0 0%
+[1] Refine 0 20%
+[1] Refine 0 40%
+[1] Refine 0 60%
+[1] Refine 0 80%
+[1] Refine RNG time (s): 185 Graph Acc: 0.999531
+[1] Refine 1 0%
+[1] Refine 1 20%
+[1] Refine 1 40%
+[1] Refine 1 60%
+[1] Refine 1 80%
+[1] Refine RNG time (s): 185 Graph Acc: 1.000000
+[1] Refine 2 0%
+[1] Refine 2 20%
+[1] Refine 2 40%
+[1] Refine 2 60%
+[1] Refine 2 80%
+[1] Refine RNG time (s): 90 Graph Acc: 1.000000
+[1] BuildGraph time (s): 522
+[1] Build Graph time (s): 522
+[1] SaveIndex(/media/ray/1tb/sift1m/spann_index/HeadIndex) begin...ready:1 GetNumSamples():159900 GetNumDeleted():0
+[1] Save Vector (159900,128) Finish!
+[1] Save BKT (1,159902) Finish!
+[1] Save RNG (159900,32) Finish!
+[1] Save DeleteID (159900,1) Finish!
+[1] Setting TreeFilePath with value tree.bin
+[1] Setting GraphFilePath with value graph.bin
+[1] Setting VectorFilePath with value vectors.bin
+[1] Setting DeleteVectorFilePath with value deletes.bin
+[1] Setting EnableBfs with value 0
+[1] Setting BKTNumber with value 1
+[1] Setting BKTKmeansK with value 32
+[1] Setting BKTLeafSize with value 8
+[1] Setting Samples with value 1000
+[1] Setting BKTLambdaFactor with value 100.000000
+[1] Setting TPTNumber with value 32
+[1] Setting TPTLeafSize with value 2000
+[1] Setting NumTopDimensionTpTreeSplit with value 5
+[1] Setting NeighborhoodSize with value 32
+[1] Setting GraphNeighborhoodScale with value 2.000000
+[1] Setting GraphCEFScale with value 2.000000
+[1] Setting RefineIterations with value 3
+[1] Setting EnableRebuild with value 0
+[1] Setting CEF with value 1000
+[1] Setting AddCEF with value 500
+[1] Setting MaxCheckForRefineGraph with value 8192
+[1] Setting RNGFactor with value 1.000000
+[1] Setting GPUGraphType with value 2
+[1] Setting GPURefineSteps with value 0
+[1] Setting GPURefineDepth with value 30
+[1] Setting GPULeafSize with value 500
+[1] Setting HeadNumGPUs with value 1
+[1] Setting TPTBalanceFactor with value 2
+[1] Setting NumberOfThreads with value 4
+[1] Setting DistCalcMethod with value L2
+[1] Setting DeletePercentageForRefine with value 0.400000
+[1] Setting AddCountForRebuild with value 1000
+[1] Setting MaxCheck with value 8192
+[1] Setting ThresholdOfNumberOfContinuousNoBetterPropagation with value 3
+[1] Setting NumberOfInitialDynamicPivots with value 50
+[1] Setting NumberOfOtherDynamicPivots with value 4
+[1] Setting HashTableExponent with value 2
+[1] Setting DataBlockSize with value 1048576
+[1] Setting DataCapacity with value 2147483647
+[1] Setting MetaRecordSize with value 10
+[1] Load Vector (159900,128) Finish!
+[1] Load BKT (1,159902) Finish!
+[1] Load RNG (159900,32) Finish!
+[1] Load DeleteID (159900,1) Finish!
+[1] select head time: 47.00s build head time: 525.00s
+[1] Begin Build SSDIndex...
+[1] Setting NumberOfThreads with value 1
+[1] Setting MaxCheck with value 2048
+[1] Setting HashTableExponent with value 4
+[1] Load Data (159900,1) Finish!
+[1] Loaded 159900 Vector IDs
+[1] Full vector count:1000000 Edge bytes:12 selection size:8000000, capacity size:8000000
+[1] Preparation done, start candidate searching.
+[1] Batch 0 vector(0,1000000) loaded with 1000000 vectors (8000000) HeadIndex acc @64:0.986875.
+[1] Searching replicas ended. RNG failed count: 28921324
+[1] Batch 0 finished!
+[1] Searching replicas ended. Search Time: 4.08 mins
+[1] Time to sort selections:0.64 sec.
+[1] Build index with posting page limit:15
+[1] Posting size limit: 119
+[1] Before Posting Cut:
+[1] Replica Count Dist: 0, 0
+[1] Replica Count Dist: 1, 929
+[1] Replica Count Dist: 2, 5730
+[1] Replica Count Dist: 3, 18138
+[1] Replica Count Dist: 4, 37847
+[1] Replica Count Dist: 5, 61307
+[1] Replica Count Dist: 6, 81356
+[1] Replica Count Dist: 7, 93278
+[1] Replica Count Dist: 8, 541515
+[1] Time to perform posting cut:0.03 sec.
+[1] TotalPageNumbers: 759670, IndexSize: 3111609868
+[1] Start output...
+[1] SubIndex Size: 1921024 bytes, 1 MBytes
+[1] Padded Size: 16975172, final total size: 3111612416.
+[1] Output done...
+[1] Time to write results:4.81 sec.
+[1] Save versionLabelID To /media/ray/1tb/sift1m/spann_index/DeletedIDs.bin
+[1] Save versionLabelID (1000000,1) Finish!
+[1] Total used time: 4.15 minutes (about 0.07 hours).
+[1] Load index with posting page limit:15
+[1] AsyncFileIO::Open a file
+[1] AsyncFileIO::InitializeFileIo: file has been created with enough space.
+[1] AsyncFileIO::InitializeFileIo: file /media/ray/1tb/sift1m/spann_index/SPTAGFullList.bin opened, fd=3 threads=1 maxNumBlocks=64
+[1] Finish reading header info, list count 159900, total doc count 1000000, dimension 128, list page offset 469.
+[1] Big page (>4K): list count 158885, total element count 5995368.
+[1] Total Element Count: 5997359
+[1] Page Count Dist: 0 678
+[1] Page Count Dist: 1 337
+[1] Page Count Dist: 2 5702
+[1] Page Count Dist: 3 20087
+[1] Page Count Dist: 4 33698
+[1] Page Count Dist: 5 35401
+[1] Page Count Dist: 6 27838
+[1] Page Count Dist: 7 17535
+[1] Page Count Dist: 8 9564
+[1] Page Count Dist: 9 4925
+[1] Page Count Dist: 10 2170
+[1] Page Count Dist: 11 1066
+[1] Page Count Dist: 12 491
+[1] Page Count Dist: 13 204
+[1] Page Count Dist: 14 116
+[1] Page Count Dist: 15 88
+[1] Load versionLabelID From /media/ray/1tb/sift1m/spann_index/DeletedIDs.bin
+[1] Load versionLabelID (1000000,1) Finish!
+[1] Current vector num: 1000000.
+[1] select head time: 47.00s build head time: 525.00s build ssd time: 249.00s
+[1] AsyncFileReader: Destroying fd=3!
+[1] AsyncFileReader: ShutDown!
+
+========================================
+实验统计摘要
+========================================
+结束时间: 2026-04-13 19:45:19
+总运行时间: 829.3 秒
+采样次数: 772
+
+CPU 使用率: 平均 308.6%, 峰值 368.00%
+内存占用 (RSS): 平均 349.8 MB, 峰值 734.90 MB
+内存占用 (VSZ): 峰值 1013.75 MB
+
+磁盘 I/O:
+  累计读取: 492 MB
+  累计写入: 180 MB
+
+阶段耗时:
+  SelectHead: 47.9s
+  BuildHead: 525.7s
+
+========================================
+输出文件
+========================================
+CSV 文件: /home/ray/code/SPTAG/results/spann_build_4t_nocache.csv
+LOG 文件: /home/ray/code/SPTAG/results/spann_build_4t_nocache.log
+========================================

@@ -1,0 +1,117 @@
+========================================
+SPTAG 内存索引性能测试监控
+========================================
+开始时间: 2026-04-14 09:46:02
+已清除缓存: 是
+
+========================================
+实验环境
+========================================
+内核版本: 6.17.0-20-generic
+操作系统: Ubuntu 24.04.4 LTS
+CPU: 
+CPU 核心数: 16
+内存总量: 
+磁盘信息:
+NAME      SIZE TYPE
+sda     931.5G disk
+nvme0n1 238.5G disk
+
+========================================
+实验配置
+========================================
+被测命令: ./Release/indexbuilder -d 128 -v Float -f XVEC -i /media/ray/1tb/sift1m/sift_base.fvecs -o /media/ray/1tb/sift1m/bkt_memory_index_8t -a BKT -c config/bkt_build.ini Index.NumberOfThreads=8
+采样间隔: 1 秒
+监控磁盘: /media/ray/1tb (sda)
+
+[1] Using AVX2 InstructionSet!
+[1] Set QuantizerFile = 
+[1] Set [Index]NumberOfThreads = 8
+[1] Setting DistCalcMethod with value L2
+[1] Setting NumberOfThreads with value 32
+[1] Setting NumberOfThreads with value 32
+[1] Setting NumberOfThreads with value 32
+[1] Setting NumberOfThreads with value 32
+[1] Setting BKTKmeansK with value 32
+[1] Setting BKTLeafSize with value 8
+[1] Setting MaxCheckForRefineGraph with value 512
+[1] Setting NeighborhoodSize with value 32
+[1] Setting NumberOfThreads with value 8
+[1] Setting RefineIterations with value 1
+[1] Setting Samples with value 1000
+[1] Setting TPTLeafSize with value 2000
+[1] Setting TPTNumber with value 8
+[1] Begin build index...
+[1] KmeansArgs: Using none quantizer!
+[1] Start to build BKTree 1
+[1] Lambda:min(1e-05,93.8496) Max:65972 Min:9674 Avg:31250.000000 Std/Avg:0.456305 Dist:95699705856.000000 NonZero/Total:32/32
+[1] Lambda:min(1e-05,110.979) Max:4631 Min:673 Avg:2061.593750 Std/Avg:0.424933 Dist:3992507392.000000 NonZero/Total:32/32
+[1] Lambda:min(1e-05,34.7605) Max:465 Min:13 Avg:144.687500 Std/Avg:0.787675 Dist:80437416.000000 NonZero/Total:32/32
+[1] Lambda:min(2.15517e-05,18.7792) Max:47 Min:1 Avg:14.500000 Std/Avg:1.002375 Dist:2206008.000000 NonZero/Total:32/32
+[1] Lambda:min(0.000217391,77.692) Max:3 Min:1 Avg:1.437500 Std/Avg:0.489975 Dist:23533.000000 NonZero/Total:32/32
+[1] 1 BKTree built, 1000002 1000000
+[1] Build Tree time (s): 43
+[1] build RNG graph!
+[1] Parallel TpTree Partition begin
+[1] Finish Getting Leaves for Tree 0
+[1] Finish Getting Leaves for Tree 1
+[1] Finish Getting Leaves for Tree 3
+[1] Finish Getting Leaves for Tree 2
+[1] Finish Getting Leaves for Tree 4
+[1] Finish Getting Leaves for Tree 6
+[1] Finish Getting Leaves for Tree 5
+[1] Finish Getting Leaves for Tree 7
+[1] Parallel TpTree Partition done
+[1] Build TPTree time (s): 3
+[1] Processing Tree 0 0%
+[1] Processing Tree 1 0%
+[1] Processing Tree 1 20%
+[1] Processing Tree 1 40%
+[1] Processing Tree 1 60%
+[1] Processing Tree 1 80%
+[1] Processing Tree 2 0%
+[1] Processing Tree 3 0%
+[1] Processing Tree 4 0%
+[1] Processing Tree 5 0%
+[1] Processing Tree 6 0%
+[1] Processing Tree 7 0%
+[1] Process TPTree time (s): 58
+[1] BuildInitKNNGraph time (s): 62
+[1] Refine 0 0%
+[1] Refine 0 20%
+[1] Refine 0 40%
+[1] Refine 0 60%
+[1] Refine 0 80%
+[1] Refine RNG time (s): 400 Graph Acc: 0.948438
+[1] BuildGraph time (s): 463
+[1] Build Graph time (s): 463
+[1] SaveIndex(/media/ray/1tb/sift1m/bkt_memory_index_8t) begin...ready:1 GetNumSamples():1000000 GetNumDeleted():0
+[1] Save Vector (1000000,128) Finish!
+[1] Save BKT (1,1000002) Finish!
+[1] Save RNG (1000000,32) Finish!
+[1] Save DeleteID (1000000,1) Finish!
+
+========================================
+实验统计摘要
+========================================
+结束时间: 2026-04-14 09:54:33
+总运行时间: 511.0 秒
+采样次数: 464
+
+CPU 使用率: 平均 613.9%, 峰值 745.00%
+内存占用 (RSS): 平均 780.3 MB, 峰值 1030.29 MB
+内存占用 (VSZ): 峰值 1619.89 MB
+
+磁盘 I/O:
+  累计读取: 492 MB
+  累计写入: 622 MB
+
+阶段耗时:
+  BuildTree: 43.5s
+
+========================================
+输出文件
+========================================
+CSV 文件: results/build/bkt_build_8t_nocache.csv
+LOG 文件: results/build/bkt_build_8t_nocache.log
+========================================
