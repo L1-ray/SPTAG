@@ -1,0 +1,116 @@
+========================================
+SPTAG 内存索引性能测试监控
+========================================
+开始时间: 2026-04-14 10:43:17
+已清除缓存: 是
+
+========================================
+实验环境
+========================================
+内核版本: 6.17.0-20-generic
+操作系统: Ubuntu 24.04.4 LTS
+CPU: 
+CPU 核心数: 16
+内存总量: 
+磁盘信息:
+NAME      SIZE TYPE
+sda     931.5G disk
+nvme0n1 238.5G disk
+
+========================================
+实验配置
+========================================
+被测命令: ./Release/indexsearcher -d 128 -v Float -f XVEC -i /media/ray/1tb/sift1m/sift_query.fvecs -x /media/ray/1tb/sift1m/bkt_memory_index_16t -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin -m 1024#2048#4096#8192 -k 32 -t 16
+采样间隔: 1 秒
+监控磁盘: /media/ray/1tb (sda)
+
+[1] Using AVX2 InstructionSet!
+[1] Setting TreeFilePath with value tree.bin
+[1] Setting GraphFilePath with value graph.bin
+[1] Setting VectorFilePath with value vectors.bin
+[1] Setting DeleteVectorFilePath with value deletes.bin
+[1] Setting EnableBfs with value 0
+[1] Setting BKTNumber with value 1
+[1] Setting BKTKmeansK with value 32
+[1] Setting BKTLeafSize with value 8
+[1] Setting Samples with value 1000
+[1] Setting BKTLambdaFactor with value 100.000000
+[1] Setting TPTNumber with value 8
+[1] Setting TPTLeafSize with value 2000
+[1] Setting NumTopDimensionTpTreeSplit with value 5
+[1] Setting NeighborhoodSize with value 32
+[1] Setting GraphNeighborhoodScale with value 2.000000
+[1] Setting GraphCEFScale with value 2.000000
+[1] Setting RefineIterations with value 1
+[1] Setting EnableRebuild with value 0
+[1] Setting CEF with value 1000
+[1] Setting AddCEF with value 500
+[1] Setting MaxCheckForRefineGraph with value 512
+[1] Setting RNGFactor with value 1.000000
+[1] Setting GPUGraphType with value 2
+[1] Setting GPURefineSteps with value 0
+[1] Setting GPURefineDepth with value 30
+[1] Setting GPULeafSize with value 500
+[1] Setting HeadNumGPUs with value 1
+[1] Setting TPTBalanceFactor with value 2
+[1] Setting NumberOfThreads with value 14
+[1] Setting DistCalcMethod with value L2
+[1] Setting DeletePercentageForRefine with value 0.400000
+[1] Setting AddCountForRebuild with value 1000
+[1] Setting MaxCheck with value 8192
+[1] Setting ThresholdOfNumberOfContinuousNoBetterPropagation with value 3
+[1] Setting NumberOfInitialDynamicPivots with value 50
+[1] Setting NumberOfOtherDynamicPivots with value 4
+[1] Setting HashTableExponent with value 2
+[1] Setting DataBlockSize with value 1048576
+[1] Setting DataCapacity with value 2147483647
+[1] Setting MetaRecordSize with value 10
+[1] Load Vector (1000000,128) Finish!
+[1] Load BKT (1,1000002) Finish!
+[1] Load RNG (1000000,32) Finish!
+[1] Load DeleteID (1000000,1) Finish!
+[1] Setting NumberOfThreads with value 16
+[1] Setting NumberOfThreads with value 16
+[1] Setting NumberOfThreads with value 16
+[1] Setting NumberOfThreads with value 16
+[1] Setting NumberOfThreads with value 16
+[1] Load binary truth...
+[1] [query]		[maxcheck]	[avg] 	[99%] 	[95%] 	[recall] 	[qps] 	[mem]
+[1] Setting MaxCheck with value 1024
+[1] 0-10000	1024	0.0004	0.0010	0.0005	0.9204		36750.7891		0GB
+[1] Setting MaxCheck with value 2048
+[1] 0-10000	2048	0.0008	0.0025	0.0013	0.9758		19915.3594		0GB
+[1] Setting MaxCheck with value 4096
+[1] 0-10000	4096	0.0014	0.0024	0.0015	0.9943		11810.0146		0GB
+[1] Setting MaxCheck with value 8192
+[1] 0-10000	8192	0.0026	0.0043	0.0031	0.9984		6056.3740		0GB
+[1] 0-10000	1024	0.0004	0.0010	0.0005	0.9204	36750.7891
+[1] 0-10000	2048	0.0008	0.0025	0.0013	0.9758	19915.3594
+[1] 0-10000	4096	0.0014	0.0024	0.0015	0.9943	11810.0146
+[1] 0-10000	8192	0.0026	0.0043	0.0031	0.9984	6056.3740
+[1] Output results finish!
+
+========================================
+实验统计摘要
+========================================
+结束时间: 2026-04-14 10:43:24
+总运行时间: 6.3 秒
+采样次数: 6
+
+CPU 使用率: 平均 256.2%, 峰值 887.00%
+内存占用 (RSS): 平均 429.8 MB, 峰值 713.62 MB
+内存占用 (VSZ): 峰值 1860.82 MB
+
+磁盘 I/O:
+  累计读取: 631 MB
+  累计写入: 0 MB
+
+阶段耗时:
+  Search: 2.5s
+
+========================================
+输出文件
+========================================
+CSV 文件: results/search/bkt_search_16t_nocache.csv
+LOG 文件: results/search/bkt_search_16t_nocache.log
+========================================

@@ -1,0 +1,199 @@
+========================================
+SPANN 索引性能测试监控
+========================================
+开始时间: 2026-04-13 18:17:35
+已清除缓存: 是
+
+========================================
+实验环境
+========================================
+内核版本: 6.17.0-20-generic
+操作系统: Ubuntu 24.04.4 LTS
+CPU: 
+CPU 核心数: 16
+内存总量: 
+磁盘信息:
+NAME      SIZE TYPE
+sda     931.5G disk
+nvme0n1 238.5G disk
+
+========================================
+实验配置
+========================================
+配置文件: /home/ray/code/SPTAG/spann_search_only.ini
+被测命令: /home/ray/code/SPTAG/Release/ssdserving /home/ray/code/SPTAG/spann_search_only.ini
+采样间隔: 1 秒
+监控磁盘: /media/ray/1tb (sda)
+索引目录: /media/ray/1tb/sift1m/spann_index
+
+[1] Using AVX2 InstructionSet!
+[1] Set QuantizerFile = 
+[1] Setting Dim with value 128
+[1] Setting DistCalcMethod with value L2
+[1] Setting IndexAlgoType with value BKT
+[1] Setting IndexDirectory with value /media/ray/1tb/sift1m/spann_index
+[1] Setting QueryPath with value /media/ray/1tb/sift1m/sift_query.fvecs
+[1] Setting QueryType with value XVEC
+[1] Setting TruthPath with value /media/ray/1tb/sift1m/sift_groundtruth.ivecs
+[1] Setting TruthType with value XVEC
+[1] Setting ValueType with value Float
+[1] Setting VectorPath with value /media/ray/1tb/sift1m/sift_base.fvecs
+[1] Setting VectorType with value XVEC
+[1] Setting isExecute with value false
+[1] Setting SearchInternalResultNum with value 32
+[1] Setting BuildSsdIndex with value false
+[1] Setting HashTableExponent with value 12
+[1] Setting isExecute with value true
+[1] Setting MaxCheck with value 2048
+[1] Setting MaxDistRatio with value 8.0
+[1] Setting NumberOfThreads with value 16
+[1] Setting ResultNum with value 10
+[1] Setting SearchPostingPageLimit with value 15
+[1] Setting SearchThreadNum with value 16
+[1] Setting isExecute with value false
+[1] Begin Select Head...
+[1] select head time: 0.00s
+[1] Begin Build Head...
+[1] select head time: 0.00s build head time: 0.00s
+[1] Begin Build SSDIndex...
+[1] Setting TreeFilePath with value tree.bin
+[1] Setting GraphFilePath with value graph.bin
+[1] Setting VectorFilePath with value vectors.bin
+[1] Setting DeleteVectorFilePath with value deletes.bin
+[1] Setting EnableBfs with value 0
+[1] Setting BKTNumber with value 1
+[1] Setting BKTKmeansK with value 32
+[1] Setting BKTLeafSize with value 8
+[1] Setting Samples with value 1000
+[1] Setting BKTLambdaFactor with value 100.000000
+[1] Setting TPTNumber with value 32
+[1] Setting TPTLeafSize with value 2000
+[1] Setting NumTopDimensionTpTreeSplit with value 5
+[1] Setting NeighborhoodSize with value 32
+[1] Setting GraphNeighborhoodScale with value 2.000000
+[1] Setting GraphCEFScale with value 2.000000
+[1] Setting RefineIterations with value 3
+[1] Setting EnableRebuild with value 0
+[1] Setting CEF with value 1000
+[1] Setting AddCEF with value 500
+[1] Setting MaxCheckForRefineGraph with value 8192
+[1] Setting RNGFactor with value 1.000000
+[1] Setting GPUGraphType with value 2
+[1] Setting GPURefineSteps with value 0
+[1] Setting GPURefineDepth with value 30
+[1] Setting GPULeafSize with value 500
+[1] Setting HeadNumGPUs with value 1
+[1] Setting TPTBalanceFactor with value 2
+[1] Setting NumberOfThreads with value 16
+[1] Setting DistCalcMethod with value L2
+[1] Setting DeletePercentageForRefine with value 0.400000
+[1] Setting AddCountForRebuild with value 1000
+[1] Setting MaxCheck with value 8192
+[1] Setting ThresholdOfNumberOfContinuousNoBetterPropagation with value 3
+[1] Setting NumberOfInitialDynamicPivots with value 50
+[1] Setting NumberOfOtherDynamicPivots with value 4
+[1] Setting HashTableExponent with value 2
+[1] Setting DataBlockSize with value 1048576
+[1] Setting DataCapacity with value 2147483647
+[1] Setting MetaRecordSize with value 10
+[1] Load Vector (160014,128) Finish!
+[1] Load BKT (1,160016) Finish!
+[1] Load RNG (160014,32) Finish!
+[1] Load DeleteID (160014,1) Finish!
+[1] Setting NumberOfThreads with value 16
+[1] Setting MaxCheck with value 2048
+[1] Setting HashTableExponent with value 12
+[1] Load Data (160014,1) Finish!
+[1] Load index with posting page limit:15
+[1] AsyncFileIO::Open a file
+[1] AsyncFileIO::InitializeFileIo: file has been created with enough space.
+[1] AsyncFileIO::InitializeFileIo: file /media/ray/1tb/sift1m/spann_index/SPTAGFullList.bin opened, fd=3 threads=16 maxNumBlocks=32
+[1] Finish reading header info, list count 160014, total doc count 1000000, dimension 128, list page offset 469.
+[1] Big page (>4K): list count 159077, total element count 5997690.
+[1] Total Element Count: 5999542
+[1] Page Count Dist: 0 617
+[1] Page Count Dist: 1 320
+[1] Page Count Dist: 2 5626
+[1] Page Count Dist: 3 20279
+[1] Page Count Dist: 4 33976
+[1] Page Count Dist: 5 35558
+[1] Page Count Dist: 6 27519
+[1] Page Count Dist: 7 17311
+[1] Page Count Dist: 8 9725
+[1] Page Count Dist: 9 4747
+[1] Page Count Dist: 10 2371
+[1] Page Count Dist: 11 1056
+[1] Page Count Dist: 12 519
+[1] Page Count Dist: 13 208
+[1] Page Count Dist: 14 80
+[1] Page Count Dist: 15 102
+[1] Load versionLabelID From /media/ray/1tb/sift1m/spann_index/DeletedIDs.bin
+[1] Load versionLabelID (1000000,1) Finish!
+[1] Current vector num: 1000000.
+[1] select head time: 0.00s build head time: 0.00s build ssd time: 0.00s
+[1] Start loading QuerySet...
+[1] Start ANN Search...
+[1] Searching: numThread: 16, numQueries: 10000.
+[1] Sent 0.00%...
+[1] Finish sending in 170.651 seconds, actuallQPS is 58.60, query count 10000.
+[1] 
+Finish ANN Search...
+[1] 
+Load VectorSet(1000000,128).
+[1] Start loading TruthFile...
+[1] Recall10@10: 0.940313 MRR@10: 1.000000
+[1] 
+Ex Elements Count:
+[1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
+[1] 1173.740	1216.000	1485.000	1556.000	1682.000	1813.000	2028.000
+[1] 
+Head Latency Distribution:
+[1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
+[1] 214.676	207.607	302.689	341.835	426.777	547.801	701.241
+[1] 
+Ex Latency Distribution:
+[1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
+[1] 57.678	54.029	81.136	95.236	127.280	209.462	286.678
+[1] 
+Total Latency Distribution:
+[1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
+[1] 272.354	264.139	376.322	421.089	520.151	725.883	917.226
+[1] 
+Total Disk Page Access Distribution:
+[1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
+[1] 182.505	 187	 218	 227	 242	 261	 278
+[1] 
+Total Disk IO Distribution:
+[1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
+[1] 31.755	  32	  32	  32	  32	  32	  32
+[1] 
+[1] Recall@10: 0.940313 MRR@10: 1.000000
+[1] 
+[1] AsyncFileReader: Destroying fd=3!
+[1] AsyncFileReader: ShutDown!
+
+========================================
+实验统计摘要
+========================================
+结束时间: 2026-04-13 18:20:29
+总运行时间: 174.6 秒
+采样次数: 80
+
+CPU 使用率: 平均 1205.8%, 峰值 1287.00%
+内存占用 (RSS): 平均 9926.2 MB, 峰值 10447.96 MB
+内存占用 (VSZ): 峰值 11583.81 MB
+
+磁盘 I/O:
+  累计读取: 7733 MB
+  累计写入: 0 MB
+
+阶段耗时:
+  BuildHead: 1.2s
+  SearchSSDIndex: 170.7s
+
+========================================
+输出文件
+========================================
+CSV 文件: /home/ray/code/SPTAG/results/spann_search_16t_nocache.csv
+LOG 文件: /home/ray/code/SPTAG/results/spann_search_16t_nocache.log
+========================================

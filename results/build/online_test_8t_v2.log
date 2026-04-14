@@ -1,0 +1,141 @@
+========================================
+SPTAG 内存索引性能测试监控
+========================================
+开始时间: 2026-04-14 17:18:28
+已清除缓存: 否
+
+========================================
+实验环境
+========================================
+内核版本: 6.17.0-20-generic
+操作系统: Ubuntu 24.04.4 LTS
+CPU: 
+CPU 核心数: 16
+内存总量: 
+磁盘信息:
+NAME      SIZE TYPE
+sda     931.5G disk
+nvme0n1 238.5G disk
+
+========================================
+实验配置
+========================================
+被测命令: ./Release/onlinetest -d 128 -v Float -f XVEC -b /media/ray/1tb/sift1m/sift_base.fvecs -q /media/ray/1tb/sift1m/sift_query.fvecs -t /media/ray/1tb/sift1m/sift_groundtruth.ivecs -a BKT -m 8192 -k 32 -t 8
+采样间隔: 1 秒
+监控磁盘: /media/ray/1tb (sda)
+
+[1] Using AVX2 InstructionSet!
+==================================================
+SPTAG 在线模式性能测试 (C++ 版本)
+==================================================
+
+[1] 加载数据...
+    基础向量: /media/ray/1tb/sift1m/sift_base.fvecs
+    查询向量: /media/ray/1tb/sift1m/sift_query.fvecs
+    基础向量: (1000000, 128)
+    查询向量: (10000, 128)
+    加载耗时: 0.54s
+    Ground truth: /media/ray/1tb/sift1m/sift_groundtruth.ivecs
+
+[2] 构建索引（在线模式，8 线程）...
+[1] Setting DistCalcMethod with value L2
+[1] Setting NumberOfThreads with value 8
+[1] Setting NeighborhoodSize with value 32
+[1] Setting TPTNumber with value 8
+[1] Setting RefineIterations with value 1
+[1] KmeansArgs: Using none quantizer!
+[1] Start to build BKTree 1
+[1] Lambda:min(1e-05,97.2561) Max:69455 Min:4032 Avg:31250.000000 Std/Avg:0.419445 Dist:95074131968.000000 NonZero/Total:32/32
+[1] Lambda:min(1e-05,78.7825) Max:7249 Min:0 Avg:2170.437500 Std/Avg:0.611568 Dist:6500580352.000000 NonZero/Total:30/32
+[1] Lambda:min(1e-05,51.3954) Max:828 Min:0 Avg:226.500000 Std/Avg:0.808328 Dist:634965376.000000 NonZero/Total:29/32
+[1] Lambda:min(1.20919e-05,50.1423) Max:142 Min:2 Avg:25.843750 Std/Avg:1.026538 Dist:62893424.000000 NonZero/Total:32/32
+[1] Lambda:min(7.0922e-05,217.001) Max:18 Min:1 Avg:4.406250 Std/Avg:1.117398 Dist:8046497.000000 NonZero/Total:32/32
+[1] Lambda:min(0.000588235,2749.09) Max:1 Min:0 Avg:0.531250 Std/Avg:0.939336 Dist:0.000000 NonZero/Total:17/32
+[1] 1 BKTree built, 1000002 1000000
+[1] Build Tree time (s): 46
+[1] build RNG graph!
+[1] Parallel TpTree Partition begin
+[1] Finish Getting Leaves for Tree 0
+[1] Finish Getting Leaves for Tree 1
+[1] Finish Getting Leaves for Tree 2
+[1] Finish Getting Leaves for Tree 3
+[1] Finish Getting Leaves for Tree 4
+[1] Finish Getting Leaves for Tree 5
+[1] Finish Getting Leaves for Tree 7
+[1] Finish Getting Leaves for Tree 6
+[1] Parallel TpTree Partition done
+[1] Build TPTree time (s): 2
+[1] Processing Tree 0 0%
+[1] Processing Tree 1 0%
+[1] Processing Tree 2 0%
+[1] Processing Tree 3 0%
+[1] Processing Tree 4 0%
+[1] Processing Tree 5 0%
+[1] Processing Tree 6 0%
+[1] Processing Tree 7 0%
+[1] Process TPTree time (s): 64
+[1] BuildInitKNNGraph time (s): 67
+[1] Refine 0 0%
+[1] Refine 0 20%
+[1] Refine 0 40%
+[1] Refine 0 60%
+[1] Refine 0 80%
+[1] Refine RNG time (s): 553 Graph Acc: 0.961875
+[1] BuildGraph time (s): 622
+[1] Build Graph time (s): 623
+    构建耗时: 669.22s (11.15分钟)
+    构建速度: 1494 vectors/s
+
+[3] 设置搜索参数 (MaxCheck=8192)...
+[1] Setting MaxCheck with value 8192
+
+[4] 搜索测试 (K=32)...
+
+[搜索结果]
+    总查询数: 10000
+    搜索耗时: 4.092s
+    QPS: 2443.56
+    平均延迟: 3.2724ms
+    P95 延迟: 7.0064ms
+    P99 延迟: 8.4032ms
+    Recall@32: 99.84%
+
+==================================================
+测试总结
+==================================================
+模式: 在线模式 (C++)
+基础向量: 1000000
+查询向量: 10000
+构建线程: 8
+搜索线程: 8
+构建耗时: 669.22s
+搜索QPS: 2443.56
+Recall@32: 99.84%
+==================================================
+
+========================================
+实验统计摘要
+========================================
+结束时间: 2026-04-14 17:29:43
+总运行时间: 675.2 秒
+采样次数: 596
+
+CPU 使用率: 平均 641.7%, 峰值 756.00%
+内存占用 (RSS): 平均 789.7 MB, 峰值 1039.61 MB
+内存占用 (VSZ): 峰值 1628.97 MB
+
+磁盘 I/O:
+  累计读取: 0 MB
+  累计写入: 0 MB
+
+阶段耗时:
+  BuildTree: 45.8s
+  BuildGraph: 623.1s
+  Search: 3.5s
+
+========================================
+输出文件
+========================================
+CSV 文件: results/build/online_test_8t_v2.csv
+LOG 文件: results/build/online_test_8t_v2.log
+========================================
