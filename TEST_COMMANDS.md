@@ -365,14 +365,28 @@ CPU 使用率: 平均 617.7%, 峰值 746.00%
 
 ## 2.7 配置文件说明
 
-| 配置文件 | 用途 | 说明 |
-|----------|------|------|
-| `config/bkt_build.ini` | BKT 构建配置 | 树参数、图参数、线程数 |
+SPTAG 内存索引使用 `config/bkt_build.ini` 配置文件：
+
+| 配置文件 | 用途 | 使用程序 | 索引类型 |
+|----------|------|---------|---------|
+| `config/bkt_build.ini` | BKT 构建配置 | `indexbuilder` | 内存索引 |
+
+**配置文件关键参数：**
+
+```ini
+[Index]
+IndexAlgoType=BKT          # BKT 算法
+NeighborhoodSize=32        # 图邻居数
+TPTNumber=8                # TPT 树数量
+RefineIterations=1         # 图精化迭代次数
+NumberOfThreads=8          # 构建线程数
+```
 
 **注意**：
 - 配置文件使用 `;` 作为注释符号，不支持 `#`
 - 配置参数放在 `[Index]` section
 - 可通过命令行参数覆盖配置：`"Index.NumberOfThreads=8"`
+- 内存索引构建和搜索分离，使用不同程序（`indexbuilder` 和 `indexsearcher`）
 
 ---
 
@@ -686,10 +700,80 @@ done
 
 # 六、SPANN 配置文件说明
 
-| 配置文件 | 用途 | 阶段 | HashTableExponent |
-|----------|------|------|-------------------|
-| `spann_build_only.ini` | 仅构建索引 | SelectHead → BuildHead → BuildSSDIndex | 4（默认） |
-| `spann_search_only.ini` | 仅搜索测试 | SearchSSDIndex | 12 |
+## 6.1 配置文件对比
+
+SPTAG 项目包含 4 个主要配置文件，用于不同类型的测试：
+
+| 配置文件 | 索引类型 | 使用程序 | SelectHead | BuildHead | BuildSSDIndex | SearchSSDIndex | HashTableExponent | 使用频率 |
+|----------|---------|---------|------------|-----------|---------------|----------------|-------------------|---------|
+| `config/bkt_build.ini` | 内存 BKT | `indexbuilder` | - | - | - | - | - | ✅ 高 |
+| `spann_build_only.ini` | 磁盘 SPANN | `ssdserving` | ✅ | ✅ | ✅ | ❌ | 4（默认） | ✅ 高 |
+| `spann_search_only.ini` | 磁盘 SPANN | `ssdserving` | ❌ | ❌ | ❌ | ✅ | 12 | ✅ 高 |
+| `spann_build.ini` | 磁盘 SPANN | `ssdserving` | ✅ | ✅ | ✅ | ✅ | 4 | ⚠️ 低 |
+
+## 6.2 为什么需要分离 `spann_build_only.ini` 和 `spann_search_only.ini`？
+
+### 问题：`HashTableExponent` 参数冲突
+
+由于 SPTAG 的参数设计问题，`HashTableExponent` 参数在所有阶段之间共享，无法在构建和搜索时使用不同的值：
+
+| 阶段 | 最优 HashTableExponent | 原因 |
+|------|----------------------|------|
+| **构建** | 4 | 较小的哈希表，构建更快 |
+| **搜索** | 12 | 较大的哈希表，搜索性能更高 |
+
+### 解决方案
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  方案一：使用 spann_build.ini（不推荐）                       │
+│  ├─ 构建：HashTableExponent=4                               │
+│  └─ 搜索：HashTableExponent=4（性能次优）                    │
+├─────────────────────────────────────────────────────────────┤
+│  方案二：分离配置（推荐）                                     │
+│  ├─ spann_build_only.ini：构建时 HashTableExponent=4        │
+│  └─ spann_search_only.ini：搜索时 HashTableExponent=12      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 6.3 各配置文件详细说明
+
+### `config/bkt_build.ini` - BKT 内存索引构建配置
+
+用于构建 BKT 内存索引，配合 `indexbuilder` 使用：
+
+```bash
+./Release/indexbuilder -c config/bkt_build.ini -a BKT ...
+```
+
+### `spann_build_only.ini` - SPANN 磁盘索引构建配置
+
+仅构建 SPANN 索引，不执行搜索：
+
+```bash
+./spann_monitor.sh -c spann_build_only.ini ...
+```
+
+### `spann_search_only.ini` - SPANN 磁盘索引搜索配置
+
+仅搜索已构建的索引，使用优化的 `HashTableExponent=12`：
+
+```bash
+./spann_monitor.sh -c spann_search_only.ini ...
+```
+
+### `spann_build.ini` - SPANN 构建+搜索一体化配置
+
+构建索引后立即搜索，由于 HashTableExponent 冲突，搜索性能不是最优，**不推荐使用**。
+
+## 6.4 配置文件阶段执行对照
+
+| 配置文件 | SelectHead | BuildHead | BuildSSDIndex | SearchSSDIndex |
+|----------|:----------:|:---------:|:-------------:|:--------------:|
+| `config/bkt_build.ini` | - | - | - | - |
+| `spann_build_only.ini` | ✅ 执行 | ✅ 执行 | ✅ 执行 | ❌ 不执行 |
+| `spann_search_only.ini` | ❌ 不执行 | ❌ 不执行 | ❌ 不执行 | ✅ 执行 |
+| `spann_build.ini` | ✅ 执行 | ✅ 执行 | ✅ 执行 | ✅ 执行 |
 
 ---
 

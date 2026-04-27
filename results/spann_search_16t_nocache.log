@@ -1,13 +1,13 @@
 ========================================
 SPANN 索引性能测试监控
 ========================================
-开始时间: 2026-04-13 18:17:35
+开始时间: 2026-04-27 16:00:01
 已清除缓存: 是
 
 ========================================
 实验环境
 ========================================
-内核版本: 6.17.0-20-generic
+内核版本: 6.17.0-22-generic
 操作系统: Ubuntu 24.04.4 LTS
 CPU: 
 CPU 核心数: 16
@@ -49,7 +49,7 @@ nvme0n1 238.5G disk
 [1] Setting NumberOfThreads with value 16
 [1] Setting ResultNum with value 10
 [1] Setting SearchPostingPageLimit with value 15
-[1] Setting SearchThreadNum with value 16
+[1] Setting SearchThreadNum with value 14
 [1] Setting isExecute with value false
 [1] Begin Select Head...
 [1] select head time: 0.00s
@@ -84,7 +84,7 @@ nvme0n1 238.5G disk
 [1] Setting GPULeafSize with value 500
 [1] Setting HeadNumGPUs with value 1
 [1] Setting TPTBalanceFactor with value 2
-[1] Setting NumberOfThreads with value 16
+[1] Setting NumberOfThreads with value 14
 [1] Setting DistCalcMethod with value L2
 [1] Setting DeletePercentageForRefine with value 0.400000
 [1] Setting AddCountForRebuild with value 1000
@@ -96,78 +96,78 @@ nvme0n1 238.5G disk
 [1] Setting DataBlockSize with value 1048576
 [1] Setting DataCapacity with value 2147483647
 [1] Setting MetaRecordSize with value 10
-[1] Load Vector (160014,128) Finish!
-[1] Load BKT (1,160016) Finish!
-[1] Load RNG (160014,32) Finish!
-[1] Load DeleteID (160014,1) Finish!
+[1] Load Vector (159976,128) Finish!
+[1] Load BKT (1,159978) Finish!
+[1] Load RNG (159976,32) Finish!
+[1] Load DeleteID (159976,1) Finish!
 [1] Setting NumberOfThreads with value 16
 [1] Setting MaxCheck with value 2048
 [1] Setting HashTableExponent with value 12
-[1] Load Data (160014,1) Finish!
+[1] Load Data (159976,1) Finish!
 [1] Load index with posting page limit:15
 [1] AsyncFileIO::Open a file
 [1] AsyncFileIO::InitializeFileIo: file has been created with enough space.
 [1] AsyncFileIO::InitializeFileIo: file /media/ray/1tb/sift1m/spann_index/SPTAGFullList.bin opened, fd=3 threads=16 maxNumBlocks=32
-[1] Finish reading header info, list count 160014, total doc count 1000000, dimension 128, list page offset 469.
-[1] Big page (>4K): list count 159077, total element count 5997690.
-[1] Total Element Count: 5999542
-[1] Page Count Dist: 0 617
-[1] Page Count Dist: 1 320
-[1] Page Count Dist: 2 5626
-[1] Page Count Dist: 3 20279
-[1] Page Count Dist: 4 33976
-[1] Page Count Dist: 5 35558
-[1] Page Count Dist: 6 27519
-[1] Page Count Dist: 7 17311
-[1] Page Count Dist: 8 9725
-[1] Page Count Dist: 9 4747
-[1] Page Count Dist: 10 2371
-[1] Page Count Dist: 11 1056
-[1] Page Count Dist: 12 519
-[1] Page Count Dist: 13 208
-[1] Page Count Dist: 14 80
-[1] Page Count Dist: 15 102
+[1] Finish reading header info, list count 159976, total doc count 1000000, dimension 128, list page offset 469.
+[1] Big page (>4K): list count 158218, total element count 6105759.
+[1] Total Element Count: 6111088
+[1] Page Count Dist: 0 735
+[1] Page Count Dist: 1 1023
+[1] Page Count Dist: 2 7503
+[1] Page Count Dist: 3 19982
+[1] Page Count Dist: 4 30417
+[1] Page Count Dist: 5 32579
+[1] Page Count Dist: 6 26863
+[1] Page Count Dist: 7 18301
+[1] Page Count Dist: 8 10752
+[1] Page Count Dist: 9 5956
+[1] Page Count Dist: 10 3081
+[1] Page Count Dist: 11 1401
+[1] Page Count Dist: 12 715
+[1] Page Count Dist: 13 349
+[1] Page Count Dist: 14 167
+[1] Page Count Dist: 15 152
 [1] Load versionLabelID From /media/ray/1tb/sift1m/spann_index/DeletedIDs.bin
 [1] Load versionLabelID (1000000,1) Finish!
 [1] Current vector num: 1000000.
 [1] select head time: 0.00s build head time: 0.00s build ssd time: 0.00s
 [1] Start loading QuerySet...
 [1] Start ANN Search...
-[1] Searching: numThread: 16, numQueries: 10000.
+[1] Searching: numThread: 14, numQueries: 10000.
 [1] Sent 0.00%...
-[1] Finish sending in 170.651 seconds, actuallQPS is 58.60, query count 10000.
+[1] Finish sending in 158.207 seconds, actuallQPS is 63.21, query count 10000.
 [1] 
 Finish ANN Search...
 [1] 
 Load VectorSet(1000000,128).
 [1] Start loading TruthFile...
-[1] Recall10@10: 0.940313 MRR@10: 1.000000
+[1] Recall10@10: 0.942054 MRR@10: 1.000000
 [1] 
 Ex Elements Count:
 [1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
-[1] 1173.740	1216.000	1485.000	1556.000	1682.000	1813.000	2028.000
+[1] 1247.721	1286.000	1567.000	1640.000	1782.000	1910.000	2281.000
 [1] 
 Head Latency Distribution:
 [1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
-[1] 214.676	207.607	302.689	341.835	426.777	547.801	701.241
+[1] 166.682	154.613	232.641	258.059	374.391	661.123	1149.116
 [1] 
 Ex Latency Distribution:
 [1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
-[1] 57.678	54.029	81.136	95.236	127.280	209.462	286.678
+[1] 54.207	43.924	66.604	78.635	432.132	751.814	1036.850
 [1] 
 Total Latency Distribution:
 [1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
-[1] 272.354	264.139	376.322	421.089	520.151	725.883	917.226
+[1] 220.889	204.264	301.197	342.744	582.094	909.226	1193.009
 [1] 
 Total Disk Page Access Distribution:
 [1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
-[1] 182.505	 187	 218	 227	 242	 261	 278
+[1] 193.367	 197	 230	 239	 257	 274	 310
 [1] 
 Total Disk IO Distribution:
 [1] Avg	50tiles	90tiles	95tiles	99tiles	99.9tiles	Max
-[1] 31.755	  32	  32	  32	  32	  32	  32
+[1] 31.676	  32	  32	  32	  32	  32	  32
 [1] 
-[1] Recall@10: 0.940313 MRR@10: 1.000000
+[1] Recall@10: 0.942054 MRR@10: 1.000000
 [1] 
 [1] AsyncFileReader: Destroying fd=3!
 [1] AsyncFileReader: ShutDown!
@@ -175,21 +175,21 @@ Total Disk IO Distribution:
 ========================================
 实验统计摘要
 ========================================
-结束时间: 2026-04-13 18:20:29
-总运行时间: 174.6 秒
-采样次数: 80
+结束时间: 2026-04-27 16:02:43
+总运行时间: 161.8 秒
+采样次数: 95
 
-CPU 使用率: 平均 1205.8%, 峰值 1287.00%
-内存占用 (RSS): 平均 9926.2 MB, 峰值 10447.96 MB
-内存占用 (VSZ): 峰值 11583.81 MB
+CPU 使用率: 平均 1169.6%, 峰值 1279.00%
+内存占用 (RSS): 平均 8777.7 MB, 峰值 9159.68 MB
+内存占用 (VSZ): 峰值 10154.75 MB
 
 磁盘 I/O:
-  累计读取: 7733 MB
+  累计读取: 8158 MB
   累计写入: 0 MB
 
 阶段耗时:
-  BuildHead: 1.2s
-  SearchSSDIndex: 170.7s
+  BuildSSDIndex: 1.2s
+  SearchSSDIndex: 157.9s
 
 ========================================
 输出文件
