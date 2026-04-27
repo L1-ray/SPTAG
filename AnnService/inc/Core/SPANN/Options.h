@@ -132,6 +132,9 @@ namespace SPTAG {
             int m_debugBuildInternalResultNum;
             bool m_enableADC;
             int m_iotimeout;
+            bool m_enableDetailedIOStats;
+            std::string m_detailedIOStatsOutput;
+            double m_detailedIOStatsSampleRate;
 
             int m_searchThreadNum;
 

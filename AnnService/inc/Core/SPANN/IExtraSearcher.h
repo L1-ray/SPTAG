@@ -16,6 +16,7 @@
 #include <chrono>
 #include <atomic>
 #include <set>
+#include <cstdint>
 
 namespace SPTAG {
     namespace SPANN {
@@ -23,24 +24,116 @@ namespace SPTAG {
         struct SearchStats
         {
             SearchStats()
-                : m_check(0),
-                m_exCheck(0),
-                m_totalListElementsCount(0),
-                m_diskIOCount(0),
-                m_diskAccessCount(0),
-                m_totalSearchLatency(0),
-                m_totalLatency(0),
-                m_exLatency(0),
-                m_asyncLatency0(0),
-                m_asyncLatency1(0),
-                m_asyncLatency2(0),
-                m_queueLatency(0),
-                m_sleepLatency(0),
-                m_compLatency(0),
-                m_diskReadLatency(0),
-                m_exSetUpLatency(0),
-                m_threadID(0)
             {
+                Reset();
+            }
+
+            void Reset()
+            {
+                m_check = 0;
+                m_exCheck = 0;
+                m_totalListElementsCount = 0;
+                m_diskIOCount = 0;
+                m_diskAccessCount = 0;
+                m_totalSearchLatency = 0;
+                m_totalLatency = 0;
+                m_exLatency = 0;
+                m_asyncLatency0 = 0;
+                m_asyncLatency1 = 0;
+                m_asyncLatency2 = 0;
+                m_queueLatency = 0;
+                m_sleepLatency = 0;
+                m_compLatency = 0;
+                m_diskReadLatency = 0;
+                m_exSetUpLatency = 0;
+                m_requestedReadBytes = 0;
+                m_readPages = 0;
+                m_postingsTouched = 0;
+                m_postingElementsRaw = 0;
+                m_distanceEvaluatedCount = 0;
+                m_duplicateVectorCount = 0;
+                m_finalResultCount = 0;
+                m_rerankCandidateCount = 0;
+                m_ioIssueLatencyMs = 0;
+                m_ioWaitLatencyMs = 0;
+                m_batchReadTotalLatencyMs = 0;
+                m_postingDecodeLatencyMs = 0;
+                m_postingParseLatencyMs = 0;
+                m_distanceCalcLatencyMs = 0;
+                m_queryStartNs = 0;
+                m_queryEndNs = 0;
+                m_threadID = 0;
+                m_searchRequestTime = std::chrono::steady_clock::time_point();
+            }
+
+            void Add(const SearchStats& other)
+            {
+                m_check += other.m_check;
+                m_exCheck += other.m_exCheck;
+                m_totalListElementsCount += other.m_totalListElementsCount;
+                m_diskIOCount += other.m_diskIOCount;
+                m_diskAccessCount += other.m_diskAccessCount;
+                m_totalSearchLatency += other.m_totalSearchLatency;
+                m_totalLatency += other.m_totalLatency;
+                m_exLatency += other.m_exLatency;
+                m_asyncLatency0 += other.m_asyncLatency0;
+                m_asyncLatency1 += other.m_asyncLatency1;
+                m_asyncLatency2 += other.m_asyncLatency2;
+                m_queueLatency += other.m_queueLatency;
+                m_sleepLatency += other.m_sleepLatency;
+                m_compLatency += other.m_compLatency;
+                m_diskReadLatency += other.m_diskReadLatency;
+                m_exSetUpLatency += other.m_exSetUpLatency;
+                m_requestedReadBytes += other.m_requestedReadBytes;
+                m_readPages += other.m_readPages;
+                m_postingsTouched += other.m_postingsTouched;
+                m_postingElementsRaw += other.m_postingElementsRaw;
+                m_distanceEvaluatedCount += other.m_distanceEvaluatedCount;
+                m_duplicateVectorCount += other.m_duplicateVectorCount;
+                m_finalResultCount += other.m_finalResultCount;
+                m_rerankCandidateCount += other.m_rerankCandidateCount;
+                m_ioIssueLatencyMs += other.m_ioIssueLatencyMs;
+                m_ioWaitLatencyMs += other.m_ioWaitLatencyMs;
+                m_batchReadTotalLatencyMs += other.m_batchReadTotalLatencyMs;
+                m_postingDecodeLatencyMs += other.m_postingDecodeLatencyMs;
+                m_postingParseLatencyMs += other.m_postingParseLatencyMs;
+                m_distanceCalcLatencyMs += other.m_distanceCalcLatencyMs;
+            }
+
+            void Divide(double divisor)
+            {
+                if (divisor <= 0) return;
+
+                m_check = static_cast<int>(m_check / divisor);
+                m_exCheck = static_cast<int>(m_exCheck / divisor);
+                m_totalListElementsCount = static_cast<int>(m_totalListElementsCount / divisor);
+                m_diskIOCount = static_cast<int>(m_diskIOCount / divisor);
+                m_diskAccessCount = static_cast<int>(m_diskAccessCount / divisor);
+                m_totalSearchLatency /= divisor;
+                m_totalLatency /= divisor;
+                m_exLatency /= divisor;
+                m_asyncLatency0 /= divisor;
+                m_asyncLatency1 /= divisor;
+                m_asyncLatency2 /= divisor;
+                m_queueLatency /= divisor;
+                m_sleepLatency /= divisor;
+                m_compLatency /= divisor;
+                m_diskReadLatency /= divisor;
+                m_exSetUpLatency /= divisor;
+                m_requestedReadBytes = static_cast<uint64_t>(m_requestedReadBytes / divisor);
+                m_readPages = static_cast<uint64_t>(m_readPages / divisor);
+                m_postingsTouched = static_cast<uint64_t>(m_postingsTouched / divisor);
+                m_postingElementsRaw = static_cast<uint64_t>(m_postingElementsRaw / divisor);
+                m_distanceEvaluatedCount = static_cast<uint64_t>(m_distanceEvaluatedCount / divisor);
+                m_duplicateVectorCount = static_cast<uint64_t>(m_duplicateVectorCount / divisor);
+                m_finalResultCount = static_cast<uint64_t>(m_finalResultCount / divisor);
+                m_rerankCandidateCount = static_cast<uint64_t>(m_rerankCandidateCount / divisor);
+                m_ioIssueLatencyMs /= divisor;
+                m_ioWaitLatencyMs /= divisor;
+                m_batchReadTotalLatencyMs /= divisor;
+                m_postingDecodeLatencyMs /= divisor;
+                m_postingParseLatencyMs /= divisor;
+                m_distanceCalcLatencyMs /= divisor;
             }
 
             int m_check;
@@ -74,6 +167,28 @@ namespace SPTAG {
             double m_diskReadLatency;
 
             double m_exSetUpLatency;
+
+            // Query-level I/O contract metrics
+            uint64_t m_requestedReadBytes;
+            uint64_t m_readPages;
+            uint64_t m_postingsTouched;
+            uint64_t m_postingElementsRaw;
+            uint64_t m_distanceEvaluatedCount;
+            uint64_t m_duplicateVectorCount;
+            uint64_t m_finalResultCount;
+            uint64_t m_rerankCandidateCount;
+
+            // Latency split metrics (milliseconds)
+            double m_ioIssueLatencyMs;
+            double m_ioWaitLatencyMs;
+            double m_batchReadTotalLatencyMs;
+            double m_postingDecodeLatencyMs;
+            double m_postingParseLatencyMs;
+            double m_distanceCalcLatencyMs;
+
+            // Query timeline in monotonic steady-clock nanoseconds
+            uint64_t m_queryStartNs;
+            uint64_t m_queryEndNs;
 
             std::chrono::steady_clock::time_point m_searchRequestTime;
 
