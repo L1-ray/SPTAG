@@ -3,6 +3,11 @@
 
 #pragma once
 #include <limits>
+#include <fstream>
+#include <iomanip>
+#include <random>
+#include <sstream>
+#include <chrono>
 #include "inc/Core/Common.h"
 #include "inc/Core/Common/DistanceUtils.h"
 #include "inc/Core/Common/QueryResultSet.h"
@@ -61,6 +66,12 @@ namespace SPTAG {
             template<typename T, typename V>
             void PrintPercentiles(const std::vector<V>& p_values, std::function<T(const V&)> p_get, const char* p_format)
             {
+                if (p_values.empty()) {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Avg\t50tiles\t90tiles\t95tiles\t99tiles\t99.9tiles\tMax\n");
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "NA\tNA\tNA\tNA\tNA\tNA\tNA\n");
+                    return;
+                }
+
                 double sum = 0;
                 std::vector<T> collects;
                 collects.reserve(p_values.size());
@@ -84,15 +95,28 @@ namespace SPTAG {
 
                 formatStr += '\n';
 
+                auto percentileIndex = [&](double ratio) -> size_t
+                {
+                    size_t idx = static_cast<size_t>(collects.size() * ratio);
+                    if (idx >= collects.size()) idx = collects.size() - 1;
+                    return idx;
+                };
+
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
                     formatStr.c_str(),
                     sum / collects.size(),
-                    collects[static_cast<size_t>(collects.size() * 0.50)],
-                    collects[static_cast<size_t>(collects.size() * 0.90)],
-                    collects[static_cast<size_t>(collects.size() * 0.95)],
-                    collects[static_cast<size_t>(collects.size() * 0.99)],
-                    collects[static_cast<size_t>(collects.size() * 0.999)],
+                    collects[percentileIndex(0.50)],
+                    collects[percentileIndex(0.90)],
+                    collects[percentileIndex(0.95)],
+                    collects[percentileIndex(0.99)],
+                    collects[percentileIndex(0.999)],
                     collects[static_cast<size_t>(collects.size() - 1)]);
+            }
+
+            inline double SafeRatio(uint64_t numerator, uint64_t denominator)
+            {
+                if (denominator == 0) return 0.0;
+                return static_cast<double>(numerator) / static_cast<double>(denominator);
             }
 
 
@@ -130,11 +154,19 @@ namespace SPTAG {
                                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Sent %.2lf%%...\n", index * 100.0 / numQueries);
                                 }
 
+                                auto queryStartTp = std::chrono::steady_clock::now();
+                                p_stats[index].m_queryStartNs = static_cast<uint64_t>(
+                                    std::chrono::duration_cast<std::chrono::nanoseconds>(queryStartTp.time_since_epoch()).count());
+                                p_stats[index].m_threadID = i;
+
                                 double startTime = threadws.getElapsedMs();
                                 p_index->GetMemoryIndex()->SearchIndex(p_results[index]);
                                 double endTime = threadws.getElapsedMs();
                                 p_index->SearchDiskIndex(p_results[index], &(p_stats[index]));
                                 double exEndTime = threadws.getElapsedMs();
+                                auto queryEndTp = std::chrono::steady_clock::now();
+                                p_stats[index].m_queryEndNs = static_cast<uint64_t>(
+                                    std::chrono::duration_cast<std::chrono::nanoseconds>(queryEndTp.time_since_epoch()).count());
 
                                 p_stats[index].m_exLatency = exEndTime - endTime;
                                 p_stats[index].m_totalLatency = p_stats[index].m_totalSearchLatency = exEndTime - startTime;
@@ -218,6 +250,7 @@ namespace SPTAG {
                 }
                 auto querySet = queryReader->GetVectorSet();
                 int numQueries = querySet->Count();
+                int effectiveQueries = min(numQueries, p_opts.m_queryCountLimit);
 
                 std::vector<QueryResult> results(numQueries, QueryResult(NULL, max(K, internalResultNum), false));
                 std::vector<SPANN::SearchStats> stats(numQueries);
@@ -263,8 +296,23 @@ namespace SPTAG {
                     K = p_opts.m_rerank;
                 }
 
+                for (int i = 0; i < effectiveQueries; ++i)
+                {
+                    uint64_t validCount = 0;
+                    int resultNum = min(K, results[i].GetResultNum());
+                    for (int j = 0; j < resultNum; ++j)
+                    {
+                        if (results[i].GetResult(j)->VID >= 0) ++validCount;
+                    }
+                    stats[i].m_finalResultCount = validCount;
+                    if (stats[i].m_rerankCandidateCount == 0) {
+                        stats[i].m_rerankCandidateCount = validCount;
+                    }
+                }
+
                 float recall = 0, MRR = 0;
                 std::vector<std::set<SizeType>> truth;
+                std::vector<double> perQueryRecall(max(0, effectiveQueries), -1.0);
                 if (!truthFile.empty())
                 {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start loading TruthFile...\n");
@@ -283,10 +331,31 @@ namespace SPTAG {
 
                     recall = COMMON::TruthSet::CalculateRecall<ValueType>((p_index->GetMemoryIndex()).get(), results, truth, K, truthK, querySet, vectorSet, numQueries, nullptr, false, &MRR);
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Recall%d@%d: %f MRR@%d: %f\n", truthK, K, recall, K, MRR);
+
+                    if (truthK > 0)
+                    {
+                        int bound = min<int>(effectiveQueries, static_cast<int>(truth.size()));
+                        for (int i = 0; i < bound; ++i)
+                        {
+                            int hit = 0;
+                            int resultNum = min(K, results[i].GetResultNum());
+                            for (int j = 0; j < resultNum; ++j)
+                            {
+                                auto vid = results[i].GetResult(j)->VID;
+                                if (vid >= 0 && truth[i].count(vid)) ++hit;
+                            }
+                            perQueryRecall[i] = static_cast<double>(hit) / static_cast<double>(truthK);
+                        }
+                    }
+                }
+
+                std::vector<SPANN::SearchStats> statsForPrint;
+                if (effectiveQueries > 0) {
+                    statsForPrint.assign(stats.begin(), stats.begin() + effectiveQueries);
                 }
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nEx Elements Count:\n");
-                PrintPercentiles<double, SPANN::SearchStats>(stats,
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
                     [](const SPANN::SearchStats& ss) -> double
                     {
                         return ss.m_totalListElementsCount;
@@ -294,7 +363,7 @@ namespace SPTAG {
                     "%.3lf");
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nHead Latency Distribution:\n");
-                PrintPercentiles<double, SPANN::SearchStats>(stats,
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
                     [](const SPANN::SearchStats& ss) -> double
                     {
                         return ss.m_totalSearchLatency - ss.m_exLatency;
@@ -302,7 +371,7 @@ namespace SPTAG {
                     "%.3lf");
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nEx Latency Distribution:\n");
-                PrintPercentiles<double, SPANN::SearchStats>(stats,
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
                     [](const SPANN::SearchStats& ss) -> double
                     {
                         return ss.m_exLatency;
@@ -310,7 +379,7 @@ namespace SPTAG {
                     "%.3lf");
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTotal Latency Distribution:\n");
-                PrintPercentiles<double, SPANN::SearchStats>(stats,
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
                     [](const SPANN::SearchStats& ss) -> double
                     {
                         return ss.m_totalSearchLatency;
@@ -318,7 +387,7 @@ namespace SPTAG {
                     "%.3lf");
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTotal Disk Page Access Distribution:\n");
-                PrintPercentiles<int, SPANN::SearchStats>(stats,
+                PrintPercentiles<int, SPANN::SearchStats>(statsForPrint,
                     [](const SPANN::SearchStats& ss) -> int
                     {
                         return ss.m_diskAccessCount;
@@ -326,12 +395,153 @@ namespace SPTAG {
                     "%4d");
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTotal Disk IO Distribution:\n");
-                PrintPercentiles<int, SPANN::SearchStats>(stats,
+                PrintPercentiles<int, SPANN::SearchStats>(statsForPrint,
                     [](const SPANN::SearchStats& ss) -> int
                     {
                         return ss.m_diskIOCount;
                     },
                     "%4d");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\n=== Detailed I/O Statistics ===\n");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nRequested Bytes Read Per Query:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return static_cast<double>(ss.m_requestedReadBytes); },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPages Read Per Query:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return static_cast<double>(ss.m_readPages); },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPostings Touched Per Query:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return static_cast<double>(ss.m_postingsTouched); },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nRaw Posting Elements Scanned Per Query:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return static_cast<double>(ss.m_postingElementsRaw); },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nDistance Evaluated Per Query:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return static_cast<double>(ss.m_distanceEvaluatedCount); },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nDuplicate Vector Read Ratio:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double {
+                        return SafeRatio(ss.m_duplicateVectorCount, ss.m_postingElementsRaw);
+                    },
+                    "%.6lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nDistance Eval Ratio:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double {
+                        return SafeRatio(ss.m_distanceEvaluatedCount, ss.m_postingElementsRaw);
+                    },
+                    "%.6lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFinal Result Ratio:\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double {
+                        return SafeRatio(ss.m_finalResultCount, ss.m_postingElementsRaw);
+                    },
+                    "%.6lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nI/O Issue Latency (ms):\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return ss.m_ioIssueLatencyMs; },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nI/O Wait Latency (ms):\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return ss.m_ioWaitLatencyMs; },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nBatch Read Total Latency (ms):\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return ss.m_batchReadTotalLatencyMs; },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPosting Decode Latency (ms):\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return ss.m_postingDecodeLatencyMs; },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPosting Parse Latency (ms):\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return ss.m_postingParseLatencyMs; },
+                    "%.3lf");
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nDistance Calc Latency (ms):\n");
+                PrintPercentiles<double, SPANN::SearchStats>(statsForPrint,
+                    [](const SPANN::SearchStats& ss) -> double { return ss.m_distanceCalcLatencyMs; },
+                    "%.3lf");
+
+                if (p_opts.m_enableDetailedIOStats && !p_opts.m_detailedIOStatsOutput.empty())
+                {
+                    std::ofstream csvOut(p_opts.m_detailedIOStatsOutput.c_str(), std::ios::out | std::ios::trunc);
+                    if (!csvOut.is_open())
+                    {
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open detailed I/O stats CSV: %s\n", p_opts.m_detailedIOStatsOutput.c_str());
+                    }
+                    else
+                    {
+                        std::ostringstream runIdBuilder;
+                        runIdBuilder << "run_" << std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch()).count();
+                        std::string runId = runIdBuilder.str();
+
+                        double sampleRate = p_opts.m_detailedIOStatsSampleRate;
+                        if (sampleRate < 0.0) sampleRate = 0.0;
+                        if (sampleRate > 1.0) sampleRate = 1.0;
+
+                        std::mt19937_64 rng(20260427ULL);
+                        std::uniform_real_distribution<double> sampleDist(0.0, 1.0);
+
+                        csvOut << "run_id,thread_count,io_threads,ssd_threads,query_id,thread_id,query_start_ns,query_end_ns,total_latency_ms,head_latency_ms,ex_latency_ms,io_issue_ms,io_wait_ms,batch_read_total_ms,posting_decode_ms,posting_parse_ms,distance_calc_ms,postings_touched,pages_read,requested_read_bytes,posting_elements_raw,distance_evaluated_count,duplicate_vector_count,final_result_count,recall\n";
+                        csvOut << std::fixed << std::setprecision(6);
+
+                        for (int i = 0; i < effectiveQueries; ++i)
+                        {
+                            if (sampleRate < 1.0 && sampleDist(rng) > sampleRate) continue;
+                            double queryRecall = (i < static_cast<int>(perQueryRecall.size())) ? perQueryRecall[i] : -1.0;
+                            double headLatency = stats[i].m_totalSearchLatency - stats[i].m_exLatency;
+
+                            csvOut
+                                << runId << ","
+                                << p_opts.m_searchThreadNum << ","
+                                << p_opts.m_ioThreads << ","
+                                << p_opts.m_iSSDNumberOfThreads << ","
+                                << i << ","
+                                << stats[i].m_threadID << ","
+                                << stats[i].m_queryStartNs << ","
+                                << stats[i].m_queryEndNs << ","
+                                << stats[i].m_totalSearchLatency << ","
+                                << headLatency << ","
+                                << stats[i].m_exLatency << ","
+                                << stats[i].m_ioIssueLatencyMs << ","
+                                << stats[i].m_ioWaitLatencyMs << ","
+                                << stats[i].m_batchReadTotalLatencyMs << ","
+                                << stats[i].m_postingDecodeLatencyMs << ","
+                                << stats[i].m_postingParseLatencyMs << ","
+                                << stats[i].m_distanceCalcLatencyMs << ","
+                                << stats[i].m_postingsTouched << ","
+                                << stats[i].m_readPages << ","
+                                << stats[i].m_requestedReadBytes << ","
+                                << stats[i].m_postingElementsRaw << ","
+                                << stats[i].m_distanceEvaluatedCount << ","
+                                << stats[i].m_duplicateVectorCount << ","
+                                << stats[i].m_finalResultCount << ","
+                                << queryRecall << "\n";
+                        }
+
+                        csvOut.close();
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Detailed I/O stats CSV saved to %s\n", p_opts.m_detailedIOStatsOutput.c_str());
+                    }
+                }
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\n");
 

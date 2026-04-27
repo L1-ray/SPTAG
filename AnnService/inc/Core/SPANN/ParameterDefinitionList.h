@@ -130,6 +130,9 @@ DefineSSDParameter(m_enableADC, bool, false, "EnableADC")
 DefineSSDParameter(m_recall_analysis, bool, false, "RecallAnalysis")
 DefineSSDParameter(m_debugBuildInternalResultNum, int, 64, "DebugBuildInternalResultNum")
 DefineSSDParameter(m_iotimeout, int, 30, "IOTimeout") // Mutable
+DefineSSDParameter(m_enableDetailedIOStats, bool, false, "EnableDetailedIOStats")
+DefineSSDParameter(m_detailedIOStatsOutput, std::string, std::string(""), "DetailedIOStatsOutput")
+DefineSSDParameter(m_detailedIOStatsSampleRate, double, 1.0, "DetailedIOStatsSampleRate")
 
 // Calculating
 // TruthFilePrefix

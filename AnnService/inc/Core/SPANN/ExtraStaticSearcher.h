@@ -270,9 +270,91 @@ namespace SPTAG
                 int diskRead = 0;
                 int diskIO = 0;
                 int listElements = 0;
+                uint64_t requestedReadBytes = 0;
+                uint64_t readPages = 0;
+                uint64_t postingsTouched = 0;
+                uint64_t postingElementsRaw = 0;
+                uint64_t distanceEvaluatedCount = 0;
+                uint64_t duplicateVectorCount = 0;
+                double ioIssueLatencyMs = 0;
+                double ioWaitLatencyMs = 0;
+                double batchReadTotalLatencyMs = 0;
+                double postingDecodeLatencyMs = 0;
+                double postingParseLatencyMs = 0;
+                double distanceCalcLatencyMs = 0;
+
+                auto durationMs = [](const std::chrono::steady_clock::time_point& start,
+                                     const std::chrono::steady_clock::time_point& end) -> double
+                {
+                    return std::chrono::duration<double, std::milli>(end - start).count();
+                };
+
+                auto decodePostingBuffer = [&](char* buffer, ListInfo* listInfo, int postingID) -> char*
+                {
+                    char* postingListData = buffer + listInfo->pageOffset;
+                    if (!m_enableDataCompression || listInfo->listEleCount == 0) {
+                        return postingListData;
+                    }
+
+                    char* fullData = (char*)p_exWorkSpace->m_decompressBuffer.GetBuffer();
+                    auto decodeStart = std::chrono::steady_clock::now();
+                    std::size_t decompressedSize = 0;
+                    try {
+                        decompressedSize = m_pCompressor->Decompress(
+                            buffer + listInfo->pageOffset,
+                            listInfo->listTotalBytes,
+                            fullData,
+                            listInfo->listEleCount * m_vectorInfoSize,
+                            m_enableDictTraining);
+                    }
+                    catch (std::runtime_error& err) {
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Decompress postingList %d failed! %s\n", postingID, err.what());
+                        throw;
+                    }
+                    auto decodeEnd = std::chrono::steady_clock::now();
+                    postingDecodeLatencyMs += durationMs(decodeStart, decodeEnd);
+
+                    if (decompressedSize != listInfo->listEleCount * m_vectorInfoSize) {
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "PostingList %d decompressed size not match! %zu, %d\n",
+                            postingID, decompressedSize, listInfo->listEleCount * m_vectorInfoSize);
+                        throw std::runtime_error("Posting decompressed size mismatch");
+                    }
+
+                    return fullData;
+                };
+
+                auto processPostingBuffer = [&](ListInfo* listInfo, char* postingListData)
+                {
+                    for (int i = 0; i < listInfo->listEleCount; ++i) {
+                        uint64_t offsetVectorID, offsetVector;
+
+                        auto parseStart = std::chrono::steady_clock::now();
+                        (this->*m_parsePosting)(offsetVectorID, offsetVector, i, listInfo->listEleCount);
+                        int vectorID = *(reinterpret_cast<int*>(postingListData + offsetVectorID));
+                        postingParseLatencyMs += durationMs(parseStart, std::chrono::steady_clock::now());
+
+                        if (p_exWorkSpace->m_deduper.CheckAndSet(vectorID)) {
+                            --listElements;
+                            ++duplicateVectorCount;
+                            continue;
+                        }
+
+                        auto parseEncodingStart = std::chrono::steady_clock::now();
+                        (this->*m_parseEncoding)(p_index, listInfo, (ValueType*)(postingListData + offsetVector));
+                        postingParseLatencyMs += durationMs(parseEncodingStart, std::chrono::steady_clock::now());
+
+                        auto distanceStart = std::chrono::steady_clock::now();
+                        auto distance2leaf = p_index->ComputeDistance(queryResults.GetQuantizedTarget(), postingListData + offsetVector);
+                        queryResults.AddPoint(vectorID, distance2leaf);
+                        distanceCalcLatencyMs += durationMs(distanceStart, std::chrono::steady_clock::now());
+                        ++distanceEvaluatedCount;
+                    }
+                };
 
 #if defined(ASYNC_READ) && !defined(BATCH_READ)
                 int unprocessed = 0;
+                std::vector<std::chrono::steady_clock::time_point> ioIssueStart(postingListCount);
+                std::vector<bool> ioSubmitted(postingListCount, false);
 #endif
 
                 for (uint32_t pi = 0; pi < postingListCount; ++pi)
@@ -288,8 +370,12 @@ namespace SPTAG
                     diskRead += listInfo->listPageCount;
                     diskIO += 1;
                     listElements += listInfo->listEleCount;
+                    readPages += static_cast<uint64_t>(listInfo->listPageCount);
+                    postingsTouched += 1;
+                    postingElementsRaw += static_cast<uint64_t>(listInfo->listEleCount);
 
                     size_t totalBytes = (static_cast<size_t>(listInfo->listPageCount) << PageSizeEx);
+                    requestedReadBytes += totalBytes;
 
 #ifdef ASYNC_READ       
                     auto& request = p_exWorkSpace->m_diskRequests[pi];
@@ -300,19 +386,19 @@ namespace SPTAG
                     request.m_success = false;
 
 #ifdef BATCH_READ // async batch read
-                    request.m_callback = [&p_exWorkSpace, &queryResults, &p_index, &request, &listElements, this](bool success)
+                    request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer](bool success)
                     {
+                        if (!success) return;
                         char* buffer = request.m_buffer;
                         ListInfo* listInfo = (ListInfo*)(request.m_payload);
-
-                        // decompress posting list
-                        char* p_postingListFullData = buffer + listInfo->pageOffset;
-                        if (m_enableDataCompression)
-                        {
-                            DecompressPosting();
+                        int postingID = -1;
+                        try {
+                            char* postingData = decodePostingBuffer(buffer, listInfo, postingID);
+                            processPostingBuffer(listInfo, postingData);
                         }
-
-                        ProcessPosting();
+                        catch (...) {
+                            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to decode/process posting %d in batch callback.\n", postingID);
+                        }
                     };
 #else // async read
                     request.m_callback = [&p_exWorkSpace, &request](bool success)
@@ -321,33 +407,45 @@ namespace SPTAG
                     };
 
                     ++unprocessed;
+                    ioIssueStart[pi] = std::chrono::steady_clock::now();
                     if (!(indexFile->ReadFileAsync(request)))
                     {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read file!\n");
                         unprocessed--;
                     }
+                    else {
+                        ioSubmitted[pi] = true;
+                    }
+                    ioIssueLatencyMs += durationMs(ioIssueStart[pi], std::chrono::steady_clock::now());
 #endif
 #else // sync read
                     char* buffer = (char*)((p_exWorkSpace->m_pageBuffers[pi]).GetBuffer());
+                    auto ioWaitStart = std::chrono::steady_clock::now();
                     auto numRead = indexFile->ReadBinary(totalBytes, buffer, listInfo->listOffset);
+                    ioWaitLatencyMs += durationMs(ioWaitStart, std::chrono::steady_clock::now());
                     if (numRead != totalBytes) {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "File %s read bytes, expected: %zu, acutal: %llu.\n", m_extraFullGraphFile.c_str(), totalBytes, numRead);
                         throw std::runtime_error("File read mismatch");
                     }
-                    // decompress posting list
-                    char* p_postingListFullData = buffer + listInfo->pageOffset;
-                    if (m_enableDataCompression)
-                    {
-                        DecompressPosting();
+                    try {
+                        char* postingData = decodePostingBuffer(buffer, listInfo, curPostingID);
+                        processPostingBuffer(listInfo, postingData);
                     }
-
-                    ProcessPosting();
+                    catch (...) {
+                        return ErrorCode::DiskIOFail;
+                    }
 #endif
                 }
 
 #ifdef ASYNC_READ
 #ifdef BATCH_READ
-                BatchReadFileAsync(m_indexFiles, (p_exWorkSpace->m_diskRequests).data(), postingListCount);
+                auto batchReadStart = std::chrono::steady_clock::now();
+                bool batchReadSuccess = BatchReadFileAsync(m_indexFiles, (p_exWorkSpace->m_diskRequests).data(), postingListCount);
+                batchReadTotalLatencyMs = durationMs(batchReadStart, std::chrono::steady_clock::now());
+                if (!batchReadSuccess) {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "BatchReadFileAsync failed!\n");
+                    return ErrorCode::DiskIOFail;
+                }
 #else
                 while (unprocessed > 0)
                 {
@@ -357,14 +455,19 @@ namespace SPTAG
                     --unprocessed;
                     char* buffer = request->m_buffer;
                     ListInfo* listInfo = static_cast<ListInfo*>(request->m_payload);
-                    // decompress posting list
-                    char* p_postingListFullData = buffer + listInfo->pageOffset;
-                    if (m_enableDataCompression)
-                    {
-                        DecompressPosting();
+                    auto requestBase = p_exWorkSpace->m_diskRequests.data();
+                    ptrdiff_t requestOffset = request - requestBase;
+                    if (requestOffset >= 0 && static_cast<size_t>(requestOffset) < ioSubmitted.size() && ioSubmitted[requestOffset]) {
+                        ioWaitLatencyMs += durationMs(ioIssueStart[requestOffset], std::chrono::steady_clock::now());
                     }
-
-                    ProcessPosting();
+                    int postingID = static_cast<int>(listInfo - m_listInfos.data());
+                    try {
+                        char* postingData = decodePostingBuffer(buffer, listInfo, postingID);
+                        processPostingBuffer(listInfo, postingData);
+                    }
+                    catch (...) {
+                        return ErrorCode::DiskIOFail;
+                    }
                 }
 #endif
 #endif
@@ -405,6 +508,20 @@ namespace SPTAG
                     p_stats->m_totalListElementsCount = listElements;
                     p_stats->m_diskIOCount = diskIO;
                     p_stats->m_diskAccessCount = diskRead;
+                    p_stats->m_requestedReadBytes = requestedReadBytes;
+                    p_stats->m_readPages = readPages;
+                    p_stats->m_postingsTouched = postingsTouched;
+                    p_stats->m_postingElementsRaw = postingElementsRaw;
+                    p_stats->m_distanceEvaluatedCount = distanceEvaluatedCount;
+                    p_stats->m_duplicateVectorCount = duplicateVectorCount;
+                    p_stats->m_ioIssueLatencyMs = ioIssueLatencyMs;
+                    p_stats->m_ioWaitLatencyMs = ioWaitLatencyMs;
+                    p_stats->m_batchReadTotalLatencyMs = batchReadTotalLatencyMs;
+                    p_stats->m_postingDecodeLatencyMs = postingDecodeLatencyMs;
+                    p_stats->m_postingParseLatencyMs = postingParseLatencyMs;
+                    p_stats->m_distanceCalcLatencyMs = distanceCalcLatencyMs;
+                    p_stats->m_compLatency = distanceCalcLatencyMs;
+                    p_stats->m_diskReadLatency = (ioWaitLatencyMs > 0.0) ? ioWaitLatencyMs : batchReadTotalLatencyMs;
                 }
                 queryResults.SetScanned(listElements);
                 return ErrorCode::Success;
