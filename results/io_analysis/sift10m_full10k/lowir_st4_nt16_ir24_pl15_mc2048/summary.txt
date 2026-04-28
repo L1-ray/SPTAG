@@ -1,0 +1,14 @@
+=== I/O Monitor Summary ===
+duration_s: 129.051
+read_bandwidth_mbs: 47.375
+device_baseline_read_mbps: 0.000
+read_bandwidth_utilization: 0.000000
+instant_queue_depth_avg: 0.000
+avg_queue_depth_from_weighted_io_time: 4.633
+peak_queue_depth: 0
+process_read_bytes_delta: 6410731520
+cpu_idle_percent: 73.675
+cpu_iowait_percent: 0.082
+psi_io_some_delta_us: 322271
+psi_io_full_delta_us: 317791
+sample_count: 1281

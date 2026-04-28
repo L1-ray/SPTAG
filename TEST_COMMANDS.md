@@ -17,8 +17,8 @@
 - 构建阶段需要 `HashTableExponent=4`（默认值，构建更快）
 
 因此，**构建和搜索测试需要分开执行**：
-1. 使用 `spann_build_only.ini` 进行索引构建
-2. 使用 `spann_search_only.ini` 进行搜索测试
+1. 使用 `configs/spann_build_only.ini` 进行索引构建
+2. 使用 `configs/spann_search_only.ini` 进行搜索测试
 
 ---
 
@@ -589,14 +589,14 @@ python3 scripts/test_online_mode.py \
 
 # 三、SPANN 磁盘索引详细测试
 
-使用 `spann_build_only.ini` 从头构建索引。
+使用 `configs/spann_build_only.ini` 从头构建索引。
 
 ---
 
 ## 3.1 单次构建测试
 
 ```bash
-/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/spann_build_only.ini -C -o /home/ray/code/SPTAG/results/spann_build_nocache.csv -l /home/ray/code/SPTAG/results/spann_build_nocache.log
+/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/configs/spann_build_only.ini -C -o /home/ray/code/SPTAG/results/spann_build_nocache.csv -l /home/ray/code/SPTAG/results/spann_build_nocache.log
 ```
 
 ---
@@ -622,7 +622,7 @@ echo "${select_time}s,${build_time}s,${ssd_time}s,${total_time}s,${mem}MB"
 
 使用已构建的索引，测试不同线程数下的搜索性能。
 
-配置文件：`spann_search_only.ini`
+配置文件：`configs/spann_search_only.ini`
 
 ---
 
@@ -631,29 +631,29 @@ echo "${select_time}s,${build_time}s,${ssd_time}s,${total_time}s,${mem}MB"
 ### 16 线程测试
 
 ```bash
-sed -i 's/SearchThreadNum=.*/SearchThreadNum=16/' /home/ray/code/SPTAG/spann_search_only.ini
-/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_16t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_16t_nocache.log
+sed -i 's/SearchThreadNum=.*/SearchThreadNum=16/' /home/ray/code/SPTAG/configs/spann_search_only.ini
+/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/configs/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_16t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_16t_nocache.log
 ```
 
 ### 8 线程测试
 
 ```bash
-sed -i 's/SearchThreadNum=.*/SearchThreadNum=8/' /home/ray/code/SPTAG/spann_search_only.ini
-/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_8t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_8t_nocache.log
+sed -i 's/SearchThreadNum=.*/SearchThreadNum=8/' /home/ray/code/SPTAG/configs/spann_search_only.ini
+/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/configs/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_8t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_8t_nocache.log
 ```
 
 ### 4 线程测试
 
 ```bash
-sed -i 's/SearchThreadNum=.*/SearchThreadNum=4/' /home/ray/code/SPTAG/spann_search_only.ini
-/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_4t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_4t_nocache.log
+sed -i 's/SearchThreadNum=.*/SearchThreadNum=4/' /home/ray/code/SPTAG/configs/spann_search_only.ini
+/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/configs/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_4t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_4t_nocache.log
 ```
 
 ### 2 线程测试
 
 ```bash
-sed -i 's/SearchThreadNum=.*/SearchThreadNum=2/' /home/ray/code/SPTAG/spann_search_only.ini
-/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_2t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_2t_nocache.log
+sed -i 's/SearchThreadNum=.*/SearchThreadNum=2/' /home/ray/code/SPTAG/configs/spann_search_only.ini
+/home/ray/code/SPTAG/spann_monitor.sh -c /home/ray/code/SPTAG/configs/spann_search_only.ini -C -o /home/ray/code/SPTAG/results/spann_search_2t_nocache.csv -l /home/ray/code/SPTAG/results/spann_search_2t_nocache.log
 ```
 
 ---
@@ -667,8 +667,8 @@ for threads in 16 8 4 2; do
     echo "=========================================="
     echo "搜索测试 ${threads} 线程..."
     echo "=========================================="
-    sed -i "s/SearchThreadNum=.*/SearchThreadNum=${threads}/" spann_search_only.ini
-    ./spann_monitor.sh -c spann_search_only.ini -C -o results/spann_search_${threads}t_nocache.csv -l results/spann_search_${threads}t_nocache.log
+    sed -i "s/SearchThreadNum=.*/SearchThreadNum=${threads}/" configs/spann_search_only.ini
+    ./spann_monitor.sh -c configs/spann_search_only.ini -C -o results/spann_search_${threads}t_nocache.csv -l results/spann_search_${threads}t_nocache.log
     echo ""
 done
 
@@ -707,11 +707,11 @@ SPTAG 项目包含 4 个主要配置文件，用于不同类型的测试：
 | 配置文件 | 索引类型 | 使用程序 | SelectHead | BuildHead | BuildSSDIndex | SearchSSDIndex | HashTableExponent | 使用频率 |
 |----------|---------|---------|------------|-----------|---------------|----------------|-------------------|---------|
 | `config/bkt_build.ini` | 内存 BKT | `indexbuilder` | - | - | - | - | - | ✅ 高 |
-| `spann_build_only.ini` | 磁盘 SPANN | `ssdserving` | ✅ | ✅ | ✅ | ❌ | 4（默认） | ✅ 高 |
-| `spann_search_only.ini` | 磁盘 SPANN | `ssdserving` | ❌ | ❌ | ❌ | ✅ | 12 | ✅ 高 |
-| `spann_build.ini` | 磁盘 SPANN | `ssdserving` | ✅ | ✅ | ✅ | ✅ | 4 | ⚠️ 低 |
+| `configs/spann_build_only.ini` | 磁盘 SPANN | `ssdserving` | ✅ | ✅ | ✅ | ❌ | 4（默认） | ✅ 高 |
+| `configs/spann_search_only.ini` | 磁盘 SPANN | `ssdserving` | ❌ | ❌ | ❌ | ✅ | 12 | ✅ 高 |
+| `configs/spann_build.ini` | 磁盘 SPANN | `ssdserving` | ✅ | ✅ | ✅ | ✅ | 4 | ⚠️ 低 |
 
-## 6.2 为什么需要分离 `spann_build_only.ini` 和 `spann_search_only.ini`？
+## 6.2 为什么需要分离 `configs/spann_build_only.ini` 和 `configs/spann_search_only.ini`？
 
 ### 问题：`HashTableExponent` 参数冲突
 
@@ -726,13 +726,13 @@ SPTAG 项目包含 4 个主要配置文件，用于不同类型的测试：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  方案一：使用 spann_build.ini（不推荐）                       │
+│  方案一：使用 configs/spann_build.ini（不推荐）                       │
 │  ├─ 构建：HashTableExponent=4                               │
 │  └─ 搜索：HashTableExponent=4（性能次优）                    │
 ├─────────────────────────────────────────────────────────────┤
 │  方案二：分离配置（推荐）                                     │
-│  ├─ spann_build_only.ini：构建时 HashTableExponent=4        │
-│  └─ spann_search_only.ini：搜索时 HashTableExponent=12      │
+│  ├─ configs/spann_build_only.ini：构建时 HashTableExponent=4        │
+│  └─ configs/spann_search_only.ini：搜索时 HashTableExponent=12      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -746,23 +746,23 @@ SPTAG 项目包含 4 个主要配置文件，用于不同类型的测试：
 ./Release/indexbuilder -c config/bkt_build.ini -a BKT ...
 ```
 
-### `spann_build_only.ini` - SPANN 磁盘索引构建配置
+### `configs/spann_build_only.ini` - SPANN 磁盘索引构建配置
 
 仅构建 SPANN 索引，不执行搜索：
 
 ```bash
-./spann_monitor.sh -c spann_build_only.ini ...
+./spann_monitor.sh -c configs/spann_build_only.ini ...
 ```
 
-### `spann_search_only.ini` - SPANN 磁盘索引搜索配置
+### `configs/spann_search_only.ini` - SPANN 磁盘索引搜索配置
 
 仅搜索已构建的索引，使用优化的 `HashTableExponent=12`：
 
 ```bash
-./spann_monitor.sh -c spann_search_only.ini ...
+./spann_monitor.sh -c configs/spann_search_only.ini ...
 ```
 
-### `spann_build.ini` - SPANN 构建+搜索一体化配置
+### `configs/spann_build.ini` - SPANN 构建+搜索一体化配置
 
 构建索引后立即搜索，由于 HashTableExponent 冲突，搜索性能不是最优，**不推荐使用**。
 
@@ -771,9 +771,9 @@ SPTAG 项目包含 4 个主要配置文件，用于不同类型的测试：
 | 配置文件 | SelectHead | BuildHead | BuildSSDIndex | SearchSSDIndex |
 |----------|:----------:|:---------:|:-------------:|:--------------:|
 | `config/bkt_build.ini` | - | - | - | - |
-| `spann_build_only.ini` | ✅ 执行 | ✅ 执行 | ✅ 执行 | ❌ 不执行 |
-| `spann_search_only.ini` | ❌ 不执行 | ❌ 不执行 | ❌ 不执行 | ✅ 执行 |
-| `spann_build.ini` | ✅ 执行 | ✅ 执行 | ✅ 执行 | ✅ 执行 |
+| `configs/spann_build_only.ini` | ✅ 执行 | ✅ 执行 | ✅ 执行 | ❌ 不执行 |
+| `configs/spann_search_only.ini` | ❌ 不执行 | ❌ 不执行 | ❌ 不执行 | ✅ 执行 |
+| `configs/spann_build.ini` | ✅ 执行 | ✅ 执行 | ✅ 执行 | ✅ 执行 |
 
 ---
 
@@ -811,7 +811,7 @@ cd /home/ray/code/SPTAG
 echo "=========================================="
 echo "1. 构建索引..."
 echo "=========================================="
-./spann_monitor.sh -c spann_build_only.ini -C -o results/spann_build_nocache.csv -l results/spann_build_nocache.log
+./spann_monitor.sh -c configs/spann_build_only.ini -C -o results/spann_build_nocache.csv -l results/spann_build_nocache.log
 
 echo ""
 echo "=========================================="
@@ -819,8 +819,8 @@ echo "2. 搜索测试..."
 echo "=========================================="
 for threads in 16 8 4 2; do
     echo "搜索测试 ${threads} 线程..."
-    sed -i "s/SearchThreadNum=.*/SearchThreadNum=${threads}/" spann_search_only.ini
-    ./spann_monitor.sh -c spann_search_only.ini -C -o results/spann_search_${threads}t_nocache.csv -l results/spann_search_${threads}t_nocache.log
+    sed -i "s/SearchThreadNum=.*/SearchThreadNum=${threads}/" configs/spann_search_only.ini
+    ./spann_monitor.sh -c configs/spann_search_only.ini -C -o results/spann_search_${threads}t_nocache.csv -l results/spann_search_${threads}t_nocache.log
 done
 
 echo ""
@@ -828,3 +828,486 @@ echo "=========================================="
 echo "所有测试完成！"
 echo "=========================================="
 ```
+
+---
+
+# 九、SPANN 搜索阶段细粒度 I/O 性能测试与分析（末尾执行版）
+
+> 本节为末尾汇总版。按本节步骤执行即可完成“query 级 + 系统级 + 聚合分析”闭环。  
+> 旧文件 `results/spann_search_16t_nocache.csv/.log` 仅支持粗粒度判断，不足以完成 query 级根因定位。
+
+## 9.1 前置准备
+
+```bash
+cd /home/ray/code/SPTAG
+cmake --build build -j8
+lsblk -d -o NAME,SIZE,TYPE
+mkdir -p /home/ray/code/SPTAG/results/io_analysis/16t_nocache
+```
+
+说明：`lsblk` 用于确认磁盘设备名（例如 `sda` 或 `nvme0n1`）。
+
+---
+
+## 9.2 生成分析配置文件
+
+```bash
+cd /home/ray/code/SPTAG
+cp configs/spann_search_only.ini configs/spann_search_io_analysis.ini
+```
+
+在 `configs/spann_search_io_analysis.ini` 的 `[SearchSSDIndex]` 里增加：
+
+```ini
+EnableDetailedIOStats=true
+DetailedIOStatsOutput=/home/ray/code/SPTAG/results/io_analysis/16t_nocache/query_io_stats.csv
+DetailedIOStatsSampleRate=1.0
+```
+
+快速验证可选项（减少执行时长）：
+
+```ini
+QueryCountLimit=200
+```
+
+---
+
+## 9.3 一键执行（推荐）
+
+```bash
+cd /home/ray/code/SPTAG
+
+bash scripts/run_io_analysis.sh \
+  -c configs/spann_search_io_analysis.ini \
+  -d sda \
+  -o results/io_analysis/16t_nocache \
+  -q results/io_analysis/16t_nocache/query_io_stats.csv \
+  -i 100
+```
+
+参数说明：
+
+- `-c`：ssdserving 配置
+- `-d`：磁盘设备名
+- `-o`：输出目录
+- `-q`：query 级 CSV 路径（需与 INI 配置一致）
+- `-i`：系统采样周期（ms）
+
+---
+
+## 9.4 分步执行（排查用）
+
+### 1) 执行搜索
+
+```bash
+cd /home/ray/code/SPTAG
+./Release/ssdserving configs/spann_search_io_analysis.ini > results/io_analysis/16t_nocache/sptag.log 2>&1
+```
+
+### 2) 单独监控系统（有 PID 时）
+
+```bash
+python3 scripts/spann_io_monitor.py \
+  --device sda \
+  --pid <ssdserving_pid> \
+  --interval-ms 100 \
+  --device-max-read-mbps 0 \
+  --output-dir results/io_analysis/16t_nocache
+```
+
+### 3) 单独生成报告
+
+```bash
+python3 scripts/analyze_spann_io.py \
+  --query-csv results/io_analysis/16t_nocache/query_io_stats.csv \
+  --disk-csv results/io_analysis/16t_nocache/disk_stats.csv \
+  --process-csv results/io_analysis/16t_nocache/process_io_stats.csv \
+  --cpu-csv results/io_analysis/16t_nocache/cpu_stats.csv \
+  --psi-csv results/io_analysis/16t_nocache/psi_io_stats.csv \
+  --sptag-log results/io_analysis/16t_nocache/sptag.log \
+  --output-report results/io_analysis/16t_nocache/report.md
+```
+
+---
+
+## 9.5 验收检查（必须通过）
+
+### 1) 日志包含细粒度统计块
+
+```bash
+rg -n "Detailed I/O Statistics|Requested Bytes Read Per Query|I/O Wait Latency|Batch Read Total Latency" \
+  results/io_analysis/16t_nocache/sptag.log
+```
+
+### 2) per-query CSV 存在且字段正确
+
+```bash
+ls -lh results/io_analysis/16t_nocache/query_io_stats.csv
+head -n 5 results/io_analysis/16t_nocache/query_io_stats.csv
+```
+
+### 3) 系统级 CSV 与报告存在
+
+```bash
+ls -lh results/io_analysis/16t_nocache/{disk_stats.csv,process_io_stats.csv,cpu_stats.csv,psi_io_stats.csv,summary.txt,report.md}
+sed -n '1,120p' results/io_analysis/16t_nocache/report.md
+```
+
+---
+
+## 9.6 二维网格压测（searchThreadNum × NumberOfThreads）
+
+### 参数说明
+
+在 BATCH_READ 模式下：
+
+| 参数 | 作用 | 影响 |
+|------|------|------|
+| `SearchThreadNum` | 前端并行查询数 | 决定同时有多少个查询进入系统 |
+| `NumberOfThreads` | AIO context / batch I/O 资源数 | 影响 I/O 吞吐能力 |
+| `IOThreadsPerHandler` | 异步 I/O 线程数 | **在 BATCH_READ 下不是关键参数**（仅非 BATCH_READ 路径使用） |
+
+**注意**：`NumberOfThreads` 不是 Head Index 查询线程数，Head Index 搜索由 `SearchThreadNum` 个线程各自串行执行。
+
+**注意**：BATCH_READ 模式下建议保持 `NumberOfThreads >= SearchThreadNum`。已有测试中 `SearchThreadNum > NumberOfThreads` 的组合可能停在 `Sent 0.00%...`，不适合作为有效压测样本。
+
+### 压测脚本
+
+8 核 16 线程机器建议将线程数上限设为 `16`。
+
+```bash
+cd /home/ray/code/SPTAG
+mkdir -p results/io_analysis/sweep
+
+for st in 1 2 4 8 12 16; do
+  for nt in 1 2 4 8 12 16; do
+    if [ "$nt" -lt "$st" ]; then
+      echo "skip invalid combo: SearchThreadNum=${st}, NumberOfThreads=${nt}"
+      continue
+    fi
+
+    run_dir="results/io_analysis/sweep/st${st}_nt${nt}"
+    mkdir -p "${run_dir}"
+
+    cp configs/spann_search_io_analysis.ini "${run_dir}/config.ini"
+    sed -i "s/^SearchThreadNum=.*/SearchThreadNum=${st}/" "${run_dir}/config.ini"
+    sed -i "s/^NumberOfThreads=.*/NumberOfThreads=${nt}/" "${run_dir}/config.ini"
+    sed -i "s|^DetailedIOStatsOutput=.*|DetailedIOStatsOutput=/home/ray/code/SPTAG/${run_dir}/query_io_stats.csv|" "${run_dir}/config.ini"
+
+    bash scripts/run_io_analysis.sh \
+      -c "${run_dir}/config.ini" \
+      -d sda \
+      -o "${run_dir}" \
+      -q "${run_dir}/query_io_stats.csv" \
+      -i 100
+  done
+done
+```
+
+### 快速压测（减少组合数）
+
+```bash
+cd /home/ray/code/SPTAG
+mkdir -p results/io_analysis/sweep_quick
+
+for st in 2 4 8 16; do
+  for nt in 4 8 16; do
+    if [ "$nt" -lt "$st" ]; then
+      echo "skip invalid combo: SearchThreadNum=${st}, NumberOfThreads=${nt}"
+      continue
+    fi
+
+    run_dir="results/io_analysis/sweep_quick/st${st}_nt${nt}"
+    mkdir -p "${run_dir}"
+
+    cp configs/spann_search_io_analysis.ini "${run_dir}/config.ini"
+    sed -i "s/^SearchThreadNum=.*/SearchThreadNum=${st}/" "${run_dir}/config.ini"
+    sed -i "s/^NumberOfThreads=.*/NumberOfThreads=${nt}/" "${run_dir}/config.ini"
+    sed -i "s|^DetailedIOStatsOutput=.*|DetailedIOStatsOutput=/home/ray/code/SPTAG/${run_dir}/query_io_stats.csv|" "${run_dir}/config.ini"
+
+    bash scripts/run_io_analysis.sh \
+      -c "${run_dir}/config.ini" \
+      -d sda \
+      -o "${run_dir}" \
+      -q "${run_dir}/query_io_stats.csv" \
+      -i 100
+  done
+done
+```
+
+---
+
+## 9.7 I/O 读取模式切换与测试
+
+### 9.7.1 三种读取模式说明
+
+SPANN 支持三种 I/O 读取模式，由 `AsyncFileReader.h` 中的宏定义控制：
+
+| 模式 | 编译方式 | 说明 | IOThreads 作用 | NumberOfThreads 作用 |
+|------|----------|------|----------------|---------------------|
+| 同步读取 | 不定义 `ASYNC_READ` | 每个 posting 串行同步读取 | 无效 | 影响 workspace 池大小 |
+| 异步读取 | 定义 `ASYNC_READ`，不定义 `BATCH_READ` | 逐个提交异步请求，等待完成 | **控制 I/O 线程池** | 影响 maxNumBlocks 和 workspace |
+| 批量异步（默认） | 定义 `ASYNC_READ` 和 `BATCH_READ` | 批量提交所有请求，统一等待 | 不是主要参数 | **控制 AIO context** |
+
+**重要**：代码使用 `#ifdef` 判断宏是否定义，而非判断宏的值。因此：
+- `#define BATCH_READ 0` 仍然会进入 `#ifdef BATCH_READ` 分支
+- 正确的切换方式是**注释掉宏定义**或**使用 `#undef`**
+
+宏定义位置：`AnnService/inc/Helper/AsyncFileReader.h` 第 33-34 行
+
+```cpp
+#define ASYNC_READ 1
+#define BATCH_READ 1
+```
+
+### 9.7.2 当前默认配置（批量异步读取）
+
+```cpp
+#define ASYNC_READ 1
+#define BATCH_READ 1
+```
+
+**特点**：
+- `io_wait_ms` 接近 0（batch 阶段耗时主要体现在 `batch_read_total_ms` 中）
+- 优先看 `batch_read_total_ms`
+- `NumberOfThreads` 是主要 I/O 相关参数
+
+### 9.7.3 切换到异步读取模式（非批量）
+
+**适用场景**：验证 `IOThreads` 参数对 I/O 性能的影响
+
+**注意（Linux）**：当前官方代码下，此模式不能直接编译通过。非 `BATCH_READ` 分支会调用 `m_processIocp.pop(...)`，但 Linux 下的 `RequestQueue` 只提供 `try_pop()`，因此在 **不修改源码** 的前提下应跳过本节，继续使用默认的批量异步模式。
+
+```bash
+cd /home/ray/code/SPTAG
+
+# 1. 备份原文件
+cp AnnService/inc/Helper/AsyncFileReader.h AnnService/inc/Helper/AsyncFileReader.h.bak
+
+# 2. 注释掉 BATCH_READ 定义（不能用 #define BATCH_READ 0）
+sed -i 's/^#define BATCH_READ 1/\/\/ #define BATCH_READ 1/' AnnService/inc/Helper/AsyncFileReader.h
+
+# 3. 验证修改（BATCH_READ 应该被注释掉）
+grep -E "ASYNC_READ|BATCH_READ" AnnService/inc/Helper/AsyncFileReader.h
+# 预期输出：
+# #define ASYNC_READ 1
+# // #define BATCH_READ 1
+
+# 4. 重新编译
+cd build && make -j$(nproc)
+
+# 5. 运行测试（此时 IOThreads 参数生效）
+mkdir -p results/io_analysis/async_mode
+for st in 2 4 8; do
+  for io in 1 2 4 8; do
+    run_dir="results/io_analysis/async_mode/st${st}_io${io}"
+    mkdir -p "${run_dir}"
+    
+    cp configs/spann_search_io_analysis.ini "${run_dir}/config.ini"
+    sed -i "s/^SearchThreadNum=.*/SearchThreadNum=${st}/" "${run_dir}/config.ini"
+    sed -i "s/^IOThreadsPerHandler=.*/IOThreadsPerHandler=${io}/" "${run_dir}/config.ini"
+    sed -i "s|^DetailedIOStatsOutput=.*|DetailedIOStatsOutput=/home/ray/code/SPTAG/${run_dir}/query_io_stats.csv|" "${run_dir}/config.ini"
+    
+    bash scripts/run_io_analysis.sh \
+      -c "${run_dir}/config.ini" \
+      -d sda \
+      -o "${run_dir}" \
+      -q "${run_dir}/query_io_stats.csv" \
+      -i 100
+  done
+done
+
+# 6. 恢复默认配置
+cp AnnService/inc/Helper/AsyncFileReader.h.bak AnnService/inc/Helper/AsyncFileReader.h
+cd build && make -j$(nproc)
+```
+
+**此模式特点**：
+- `io_wait_ms` 包含 I/O 等待 + completion 消费/调度开销（不完全是纯设备等待时间）
+- `IOThreads` 控制异步 I/O 线程池大小
+- `io_issue_ms` 显示 I/O 提交延迟
+- `NumberOfThreads` 仍影响 maxNumBlocks 计算和 workspace 池大小
+
+### 9.7.4 切换到同步读取模式
+
+**适用场景**：作为基线对比，排除异步机制的影响
+
+**注意（当前官方代码）**：此模式目前也不能直接编译通过。关闭 `ASYNC_READ` 后会进入未充分维护的同步分支，已知会触发 `ExtraStaticSearcher.h` 中的编译错误。因此在 **不修改源码** 的前提下，应跳过本节。
+
+```bash
+cd /home/ray/code/SPTAG
+
+# 1. 备份原文件（如果之前没备份）
+cp AnnService/inc/Helper/AsyncFileReader.h AnnService/inc/Helper/AsyncFileReader.h.bak
+
+# 2. 注释掉两个宏定义
+sed -i 's/^#define ASYNC_READ 1/\/\/ #define ASYNC_READ 1/' AnnService/inc/Helper/AsyncFileReader.h
+sed -i 's/^#define BATCH_READ 1/\/\/ #define BATCH_READ 1/' AnnService/inc/Helper/AsyncFileReader.h
+
+# 3. 验证修改（两个宏都应该被注释掉）
+grep -E "ASYNC_READ|BATCH_READ" AnnService/inc/Helper/AsyncFileReader.h
+# 预期输出：
+# // #define ASYNC_READ 1
+# // #define BATCH_READ 1
+
+# 4. 重新编译
+cd build && make -j$(nproc)
+
+# 5. 运行测试（同步模式下 I/O 参数不直接影响性能）
+mkdir -p results/io_analysis/sync_mode
+for st in 2 4 8; do
+  run_dir="results/io_analysis/sync_mode/st${st}"
+  mkdir -p "${run_dir}"
+  
+  cp configs/spann_search_io_analysis.ini "${run_dir}/config.ini"
+  sed -i "s/^SearchThreadNum=.*/SearchThreadNum=${st}/" "${run_dir}/config.ini"
+  sed -i "s|^DetailedIOStatsOutput=.*|DetailedIOStatsOutput=/home/ray/code/SPTAG/${run_dir}/query_io_stats.csv|" "${run_dir}/config.ini"
+  
+  bash scripts/run_io_analysis.sh \
+    -c "${run_dir}/config.ini" \
+    -d sda \
+    -o "${run_dir}" \
+    -q "${run_dir}/query_io_stats.csv" \
+    -i 100
+done
+
+# 6. 恢复默认配置
+cp AnnService/inc/Helper/AsyncFileReader.h.bak AnnService/inc/Helper/AsyncFileReader.h
+cd build && make -j$(nproc)
+```
+
+**此模式特点**：
+- `io_wait_ms` 显示同步 `ReadBinary()` 的实际调用时间
+- `IOThreads` 不影响 I/O 行为
+- `NumberOfThreads` 仍影响 workspace 池大小
+- 每次读取串行执行，无并发优化
+
+### 9.7.5 恢复到默认配置（批量异步读取）
+
+```bash
+cd /home/ray/code/SPTAG
+
+# 方法一：使用备份文件恢复（推荐）
+cp AnnService/inc/Helper/AsyncFileReader.h.bak AnnService/inc/Helper/AsyncFileReader.h
+
+# 方法二：取消注释（如果备份丢失）
+sed -i 's/^\/\/ #define ASYNC_READ 1/#define ASYNC_READ 1/' AnnService/inc/Helper/AsyncFileReader.h
+sed -i 's/^\/\/ #define BATCH_READ 1/#define BATCH_READ 1/' AnnService/inc/Helper/AsyncFileReader.h
+
+# 验证配置
+grep -E "ASYNC_READ|BATCH_READ" AnnService/inc/Helper/AsyncFileReader.h
+# 预期输出：
+# #define ASYNC_READ 1
+# #define BATCH_READ 1
+
+# 重新编译
+cd build && make -j$(nproc)
+```
+
+### 9.7.6 模式对比测试脚本
+
+**注意（当前官方代码）**：下方脚本中的“异步读取模式”和“同步读取模式”部分目前都不能直接通过编译；若不修改源码，请仅保留默认的批量异步模式测试。
+
+```bash
+#!/bin/bash
+# 完整的三模式对比测试（含多线程配置）
+
+cd /home/ray/code/SPTAG
+BACKUP_FILE="AnnService/inc/Helper/AsyncFileReader.h.bak"
+HEADER_FILE="AnnService/inc/Helper/AsyncFileReader.h"
+
+# 确保有备份
+cp "$HEADER_FILE" "$BACKUP_FILE"
+
+run_test() {
+  local mode=$1
+  local st=$2
+  local param_name=$3
+  local param_val=$4
+  
+  local run_dir="results/io_analysis/${mode}_mode/st${st}_${param_name}${param_val}"
+  mkdir -p "$run_dir"
+  
+  cp configs/spann_search_io_analysis.ini "$run_dir/config.ini"
+  sed -i "s/^SearchThreadNum=.*/SearchThreadNum=${st}/" "$run_dir/config.ini"
+  if [ "$param_name" = "nt" ]; then
+    sed -i "s/^NumberOfThreads=.*/NumberOfThreads=${param_val}/" "$run_dir/config.ini"
+  elif [ "$param_name" = "io" ]; then
+    sed -i "s/^IOThreadsPerHandler=.*/IOThreadsPerHandler=${param_val}/" "$run_dir/config.ini"
+  fi
+  sed -i "s|^DetailedIOStatsOutput=.*|DetailedIOStatsOutput=/home/ray/code/SPTAG/${run_dir}/query_io_stats.csv|" "$run_dir/config.ini"
+  
+  bash scripts/run_io_analysis.sh \
+    -c "$run_dir/config.ini" \
+    -d sda \
+    -o "$run_dir" \
+    -q "$run_dir/query_io_stats.csv" \
+    -i 100
+}
+
+echo "=== 测试同步读取模式 ==="
+# 注释掉两个宏
+sed -i 's/^#define ASYNC_READ 1/\/\/ #define ASYNC_READ 1/' "$HEADER_FILE"
+sed -i 's/^#define BATCH_READ 1/\/\/ #define BATCH_READ 1/' "$HEADER_FILE"
+grep -E "ASYNC_READ|BATCH_READ" "$HEADER_FILE"
+cd build && make -j$(nproc) && cd ..
+
+# 同步模式：只测试 SearchThreadNum（I/O 参数不影响）
+for st in 2 4 8 16; do
+  run_test "sync" "$st" "nt" "16"
+done
+
+echo "=== 测试异步读取模式 ==="
+# 只保留 ASYNC_READ
+sed -i 's/^\/\/ #define ASYNC_READ 1/#define ASYNC_READ 1/' "$HEADER_FILE"
+# BATCH_READ 保持注释
+grep -E "ASYNC_READ|BATCH_READ" "$HEADER_FILE"
+cd build && make -j$(nproc) && cd ..
+
+# 异步模式：测试 SearchThreadNum × IOThreads
+for st in 2 4 8; do
+  for io in 1 2 4 8; do
+    run_test "async" "$st" "io" "$io"
+  done
+done
+
+echo "=== 测试批量异步读取模式（默认） ==="
+# 恢复两个宏
+cp "$BACKUP_FILE" "$HEADER_FILE"
+grep -E "ASYNC_READ|BATCH_READ" "$HEADER_FILE"
+cd build && make -j$(nproc) && cd ..
+
+# 批量异步模式：测试 SearchThreadNum × NumberOfThreads
+for st in 2 4 8; do
+  for nt in 4 8 16; do
+    run_test "batch" "$st" "nt" "$nt"
+  done
+done
+
+echo "=== 测试完成，结果在 results/io_analysis/ 下 ==="
+echo "=== 恢复完成 ==="
+```
+
+### 9.7.7 口径说明
+
+| 模式 | `io_wait_ms` 含义 | `batch_read_total_ms` 含义 |
+|------|-------------------|---------------------------|
+| 同步读取 | `ReadBinary()` 调用时间 | 0 |
+| 异步读取 | I/O 提交到 completion 消费（含调度开销） | 0 |
+| 批量异步 | 0 | 整个 batch 阶段总耗时（含 I/O 等待、completion 处理、回调内处理） |
+
+**注意**：
+- 异步读取模式的 `io_wait_ms` 不完全是纯设备等待时间，包含 completion 消费和线程调度开销
+- 不同模式的延迟指标**不能直接横向比较**
+- 若需严格可比的 I/O 等待时间，需要改造：BATCH 回调只标记完成，将 decode/parse/compute 移到 query 线程执行
+
+---
+
+## 9.8 快速工具自检
+
+```bash
+cd /home/ray/code/SPTAG
+python3 scripts/test_spann_io_tools.py
+```
+
+预期输出包含：`Ran 2 tests ... OK`。
