@@ -1,5 +1,46 @@
 # SPANN 搜索阶段查询级与设备级 I/O 观测闭环方案（修订版）
 
+## 零、关键参数说明（BATCH_READ 模式）
+
+在执行压测前，必须正确理解 SPANN 的三个线程相关参数：
+
+### 参数定义
+
+| 参数 | 配置键 | 默认值 | 真实作用 |
+|------|--------|--------|----------|
+| `m_searchThreadNum` | `SearchThreadNum` | 2 | **前端并行查询数**，决定同时有多少个查询进入系统 |
+| `m_iSSDNumberOfThreads` | `NumberOfThreads` | 16 | 多用途：1) Build SSD 阶段并行构建；2) **BATCH_READ 下传给 AsyncIO 初始化（AIO context 数）**；3) Workspace ID 池大小 |
+| `m_ioThreads` | `IOThreadsPerHandler` | 4 | **仅在非 BATCH_READ 路径下控制异步 I/O 线程数**；在 BATCH_READ 下不是关键参数 |
+
+### 关键代码证据
+
+```cpp
+// ExtraStaticSearcher.h 第 203-207 行
+#ifdef BATCH_READ
+    O_RDONLY | O_DIRECT, ..., p_opt.m_iSSDNumberOfThreads  // BATCH_READ 用 NumberOfThreads
+#else
+    O_RDONLY | O_DIRECT, ..., p_opt.m_ioThreads            // 非 BATCH_READ 用 IOThreads
+#endif
+```
+
+### 常见误解纠正
+
+| 错误理解 | 正确理解 |
+|----------|----------|
+| "NumberOfThreads 控制 Head Index 并发线程数" | ❌ Head Index 搜索由 `SearchThreadNum` 个线程各自串行执行 |
+| "IOThreads=4 是 I/O 线程池瓶颈" | ❌ 在 BATCH_READ 下，IOThreads 不直接影响 I/O |
+| "三个参数都是同一层面的线程数" | ❌ 它们作用于不同层面：查询调度、I/O 资源、I/O 线程池 |
+
+### 压测建议
+
+在默认 **BATCH_READ** 模式下，应分别 sweep：
+- `SearchThreadNum`（前端并行查询数）
+- `NumberOfThreads`（AIO context / batch I/O 资源数）
+
+`IOThreadsPerHandler` 在 BATCH_READ 下不是关键参数，可保持默认值。
+
+---
+
 ## 一、背景与目标
 
 ### 1.1 问题背景

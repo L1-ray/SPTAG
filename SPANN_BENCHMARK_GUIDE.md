@@ -374,7 +374,7 @@ spann_index/
 
 ### 4.1 搜索配置文件
 
-创建单独的搜索配置文件 `spann_search_only.ini`：
+创建单独的搜索配置文件 `configs/spann_search_only.ini`：
 
 ```ini
 [Base]
@@ -420,7 +420,7 @@ SearchPostingPageLimit=15
 ### 4.2 执行搜索测试
 
 ```bash
-./Release/ssdserving spann_search_only.ini
+./Release/ssdserving configs/spann_search_only.ini
 ```
 
 ### 4.3 搜索流程
@@ -585,7 +585,7 @@ ResultNum=10
 
 **方式二：自定义输出路径**
 ```bash
-./spann_monitor.sh -c spann_search_only.ini -o metrics.csv -l experiment.log
+./spann_monitor.sh -c configs/spann_search_only.ini -o metrics.csv -l experiment.log
 ```
 
 **方式三：完整命令行**
@@ -611,10 +611,10 @@ ResultNum=10
 
 ```bash
 # 清除缓存后运行测试
-./spann_monitor.sh -c spann_search_only.ini -C
+./spann_monitor.sh -c configs/spann_search_only.ini -C
 
 # 完整示例（结果保存到 results 目录）
-./spann_monitor.sh -c spann_search_only.ini -C -o results/search_nocache.csv -l results/search_nocache.log
+./spann_monitor.sh -c configs/spann_search_only.ini -C -o results/search_nocache.csv -l results/search_nocache.log
 ```
 
 **清除缓存功能说明：**
@@ -1018,8 +1018,8 @@ SearchPostingPageLimit=15
 - `HashTableExponent=12` 会使 BuildSSDIndex 阶段变慢约 256 倍
 
 **解决方案**：将构建和搜索分成两个独立的配置文件执行：
-1. `spann_build_only.ini` - 仅构建，`[SearchSSDIndex].isExecute=false`
-2. `spann_search_only.ini` - 仅搜索，其他阶段 `isExecute=false`
+1. `configs/spann_build_only.ini` - 仅构建，`[SearchSSDIndex].isExecute=false`
+2. `configs/spann_search_only.ini` - 仅搜索，其他阶段 `isExecute=false`
 
 ### B.2 SelectHead 阶段 NumberOfThreads 不生效
 

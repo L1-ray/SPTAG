@@ -88,10 +88,10 @@ usage() {
     $0 -c spann_sift1m_config.ini
 
     # 方式 3: 仅监控搜索阶段（清除缓存）
-    $0 -c spann_search_only.ini -o search_metrics.csv -C
+    $0 -c configs/spann_search_only.ini -o search_metrics.csv -C
 
     # 方式 4: 清除缓存并测试
-    $0 -c spann_search_only.ini -C
+    $0 -c configs/spann_search_only.ini -C
 
 输出 CSV 列:
     timestamp          - 时间戳 (ISO 8601)
