@@ -4,7 +4,7 @@
 [![Build status](https://sysdnn.visualstudio.com/SPTAG/_apis/build/status/SPTAG-GITHUB)](https://sysdnn.visualstudio.com/SPTAG/_build/latest?definitionId=2)
 
 ## **SPTAG**
- SPTAG (Space Partition Tree And Graph) is a library for large scale vector approximate nearest neighbor search scenario released by [Microsoft Research (MSR)](https://www.msra.cn/) and [Microsoft Bing](http://bing.com). 
+ SPTAG (Space Partition Tree And Graph) is a library for large scale vector approximate nearest neighbor search scenario released by [Microsoft Research (MSR)](https://www.msra.cn/) and [Microsoft Bing](http://bing.com).
 
  <p align="center">
  <img src="docs/img/sptag.png" alt="architecture" width="500"/>
@@ -16,11 +16,11 @@
 * New Research Paper [VBASE: Unifying Online Vector Similarity Search and Relational Queries via Relaxed Monotonicity](https://www.usenix.org/system/files/osdi23-zhang-qianxi_1.pdf) - _published in OSDI 2023_
 
 ## **Introduction**
- 
-This library assumes that the samples are represented as vectors and that the vectors can be compared by L2 distances or cosine distances. 
-Vectors returned for a query vector are the vectors that have smallest L2 distance or cosine distances with the query vector. 
 
-SPTAG provides two methods: kd-tree and relative neighborhood graph (SPTAG-KDT) 
+This library assumes that the samples are represented as vectors and that the vectors can be compared by L2 distances or cosine distances.
+Vectors returned for a query vector are the vectors that have smallest L2 distance or cosine distances with the query vector.
+
+SPTAG provides two methods: kd-tree and relative neighborhood graph (SPTAG-KDT)
 and balanced k-means tree and relative neighborhood graph (SPTAG-BKT).
 SPTAG-KDT is advantageous in index building cost, and SPTAG-BKT is advantageous in search accuracy in very high-dimensional data.
 
@@ -28,12 +28,12 @@ SPTAG-KDT is advantageous in index building cost, and SPTAG-BKT is advantageous 
 
 ## **How it works**
 
-SPTAG is inspired by the NGS approach [[WangL12](#References)]. It contains two basic modules: index builder and searcher. 
-The RNG is built on the k-nearest neighborhood graph [[WangWZTG12](#References), [WangWJLZZH14](#References)] 
+SPTAG is inspired by the NGS approach [[WangL12](#References)]. It contains two basic modules: index builder and searcher.
+The RNG is built on the k-nearest neighborhood graph [[WangWZTG12](#References), [WangWJLZZH14](#References)]
 for boosting the connectivity. Balanced k-means trees are used to replace kd-trees to avoid the inaccurate distance bound estimation in kd-trees for very high-dimensional vectors.
-The search begins with the search in the space partition trees for 
-finding several seeds to start the search in the RNG. 
-The searches in the trees and the graph are iteratively conducted. 
+The search begins with the search in the space partition trees for
+finding several seeds to start the search in the RNG.
+The searches in the trees and the graph are iteratively conducted.
 
  ## **Highlights**
   * Fresh update: Support online vector deletion and insertion
@@ -43,26 +43,125 @@ The searches in the trees and the graph are iteratively conducted.
 
 ### **Requirements**
 
-* swig >= 4.0.2
-* cmake >= 3.12.0
-* boost >= 1.67.0
+| Dependency | Minimum Version | Required For |
+|------------|-----------------|--------------|
+| CMake | >= 3.12 | Build system |
+| GCC (Linux) | >= 5.0 | Compiler |
+| MSVC (Windows) | >= 14.0 (VS 2019) | Compiler |
+| Boost | >= 1.67 | Core library |
+| OpenMP | - | Parallelism (required) |
+| Intel TBB | >= 2020 | Parallelism (optional, recommended) |
+| SWIG | >= 4.0.2 | Python bindings (optional) |
+| Python 3 | >= 3.6 | Python bindings (optional) |
 
-### **Fast clone**
+### **Install Dependencies**
 
+#### Ubuntu 24.04 / 22.04 (Recommended)
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake libboost-all-dev libtbb-dev libomp-dev swig python3-dev
 ```
-set GIT_LFS_SKIP_SMUDGE=1
-git clone --recurse-submodules https://github.com/microsoft/SPTAG
 
-OR
-
-git config --global filter.lfs.smudge "git-lfs smudge --skip -- %f"
-git config --global filter.lfs.process "git-lfs filter-process --skip"
+#### Ubuntu 20.04
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake libboost-all-dev libtbb-dev libomp-dev swig python3-dev
 ```
 
-### **Install**
+#### CentOS / RHEL / Rocky Linux
+```bash
+sudo yum groupinstall -y "Development Tools"
+sudo yum install -y cmake3 boost-devel tbb-devel libomp-devel swig python3-devel
 
-> For Linux:
-> Compile SPDK
+# Create cmake symlink if needed
+sudo ln -sf /usr/bin/cmake3 /usr/bin/cmake
+```
+
+#### Fedora
+```bash
+sudo dnf groupinstall -y "Development Tools"
+sudo dnf install -y cmake boost-devel tbb-devel libomp-devel swig python3-devel
+```
+
+#### macOS (with Homebrew)
+```bash
+brew install cmake boost tbb swig python3 libomp
+```
+
+#### Windows (vcpkg)
+```powershell
+# Install vcpkg if not already installed
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+.\bootstrap-vcpkg.bat
+
+# Install dependencies
+.\vcpkg install boost tbb openmp
+```
+
+### **Quick Build (Recommended)**
+
+For most users, the simplified build without SPDK/RocksDB dependencies:
+
+#### Linux
+```bash
+mkdir build
+cd build && cmake -DSPDK=OFF -DROCKSDB=OFF .. && make -j$(nproc)
+```
+Compiled binaries are placed in `Release/` directory.
+
+#### Windows
+```bash
+mkdir build
+cd build && cmake -A x64 -DSPDK=OFF -DROCKSDB=OFF ..
+```
+Open `SPTAGLib.sln` in Visual Studio 2019+ and build the `ALL_BUILD` project.
+Binaries will be in `Release/` directory.
+
+#### Docker
+```bash
+docker build -t sptag .
+```
+Binaries will be in `/app/Release/` inside the container.
+
+### **Build Options (CMake)**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `GPU` | OFF | Enable GPU support |
+| `ROCKSDB` | OFF | Enable RocksDB storage backend |
+| `SPDK` | OFF | Enable SPDK storage backend |
+| `TBB` | ON | Enable Intel TBB for parallelism |
+| `URING` | OFF | Enable liburing/io_uring support (Linux) |
+| `USE_ASAN` | OFF | Enable AddressSanitizer for debugging |
+
+Example with custom options:
+```bash
+cmake -DSPDK=OFF -DROCKSDB=OFF -DTBB=ON -DURING=ON ..
+```
+
+### **Build Output**
+
+After successful build, the `Release/` directory contains:
+
+| Binary | Description |
+|--------|-------------|
+| `indexbuilder` | Build in-memory index (BKT/KDT) |
+| `indexsearcher` | Search in-memory index |
+| `aggregator` | Distributed search aggregator |
+| `client` | Remote search client |
+| `server` | Socket-based search service |
+| `ssdserving` | SSD index build and search (SPANN) |
+| `quantizer` | Train PQ/OPQ quantizers |
+| `libSPTAGLib.so` | Shared library |
+| `libSPTAGLibStatic.a` | Static library |
+| `_SPTAG.so` | Python binding module |
+
+### **Full Build (Advanced)**
+
+For SPDK and RocksDB support, additional dependencies are required:
+
+#### Compile SPDK (Linux only)
 ```bash
 cd ThirdParty/spdk
 ./scripts/pkgdep.sh
@@ -70,7 +169,7 @@ CC=gcc-9 ./configure
 CC=gcc-9 make -j
 ```
 
-> Compile isal-l_crypto
+#### Compile isal-l_crypto (Linux only)
 ```bash
 cd ThirdParty/isal-l_crypto
 ./autogen.sh
@@ -78,40 +177,59 @@ cd ThirdParty/isal-l_crypto
 make -j
 ```
 
-> Build RocksDB
+#### Build RocksDB
 ```bash
 mkdir build && cd build
-cmake -DUSE_RTTI=1 -DWITH_JEMALLOC=1 -DWITH_SNAPPY=1 -DCMAKE_C_COMPILER=gcc-7 -DCMAKE_CXX_COMPILER=g++-7 -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-fPIC" ..
+cmake -DUSE_RTTI=1 -DWITH_JEMALLOC=1 -DWITH_SNAPPY=1 \
+      -DCMAKE_C_COMPILER=gcc-7 -DCMAKE_CXX_COMPILER=g++-7 \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-fPIC" ..
 make -j
 sudo make install
 ```
 
-> Build SPTAG
+#### Build SPTAG with full dependencies
 ```bash
 mkdir build
-cd build && cmake -DSPDK=OFF -DROCKSDB=OFF .. && make
+cd build && cmake -DSPDK=ON -DROCKSDB=ON .. && make -j$(nproc)
 ```
-It will generate a Release folder in the code directory which contains all the build targets.
 
-> For Windows:
+### **Fast Clone (Skip LFS)**
+
 ```bash
-mkdir build
-cd build && cmake -A x64 -DSPDK=OFF -DROCKSDB=OFF ..
+# Option 1: Environment variable
+GIT_LFS_SKIP_SMUDGE=1 git clone --recurse-submodules https://github.com/microsoft/SPTAG
+
+# Option 2: Git config
+git config --global filter.lfs.smudge "git-lfs smudge --skip -- %f"
+git config --global filter.lfs.process "git-lfs filter-process --skip"
+git clone --recurse-submodules https://github.com/microsoft/SPTAG
 ```
-It will generate a SPTAGLib.sln in the build directory. 
-Compiling the ALL_BUILD project in the Visual Studio (at least 2019) will generate a Release directory which contains all the build targets.
 
-For detailed instructions on installing Windows binaries, please see [here](docs/WindowsInstallation.md)
+### **Verify Build**
 
-> Using Docker:
+Run the test suite to verify the build:
 ```bash
-docker build -t sptag .
+# Run all tests
+./Release/SPTAGTest
+
+# Run specific test suite
+./Release/SPTAGTest --run_test=TestSuiteName
+
+# Verbose output
+./Release/SPTAGTest --log_level=test_suite
 ```
-Will build a docker container with binaries in `/app/Release/`.
 
-### **Verify** 
+For detailed Windows installation, see [Windows Installation Guide](docs/WindowsInstallation.md).
 
-Run the SPTAGTest (or Test.exe) in the Release folder to verify all the tests have passed.
+## **Tested Environments**
+
+| OS | Compiler | CMake | Boost | Status |
+|----|----------|-------|-------|--------|
+| Ubuntu 24.04 LTS | GCC 13.3.0 | 3.28.3 | 1.83.0 | ✓ Tested |
+| Ubuntu 22.04 LTS | GCC 11.x | 3.22+ | 1.74+ | ✓ Works |
+| Ubuntu 20.04 LTS | GCC 9.x | 3.16+ | 1.71+ | ✓ Works |
+| Windows 10/11 | VS 2019/2022 | 3.12+ | 1.67+ | ✓ Works |
+| macOS 12+ | Clang 14+ | 3.12+ | 1.67+ | ✓ Works |
 
 ### **Usage**
 
@@ -137,13 +255,13 @@ Please cite SPTAG in your publications if it helps your research:
 }
 
 @inproceedings{ChenW21,
-  author = {Qi Chen and 
-            Bing Zhao and 
-            Haidong Wang and 
-            Mingqin Li and 
-            Chuanjie Liu and 
-            Zengzhong Li and 
-            Mao Yang and 
+  author = {Qi Chen and
+            Bing Zhao and
+            Haidong Wang and
+            Mingqin Li and
+            Chuanjie Liu and
+            Zengzhong Li and
+            Mao Yang and
             Jingdong Wang},
   title = {SPANN: Highly-efficient Billion-scale Approximate Nearest Neighbor Search},
   booktitle = {35th Conference on Neural Information Processing Systems (NeurIPS 2021)},
@@ -153,7 +271,7 @@ Please cite SPTAG in your publications if it helps your research:
 @manual{ChenW18,
   author    = {Qi Chen and
                Haidong Wang and
-               Mingqin Li and 
+               Mingqin Li and
                Gang Ren and
                Scarlett Li and
                Jeffery Zhu and
