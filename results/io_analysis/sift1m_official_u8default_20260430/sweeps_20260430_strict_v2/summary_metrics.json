@@ -1,0 +1,134 @@
+[
+  {
+    "run": "st1_nt40_ir64_pl4",
+    "qps": 1271.13,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.787,
+    "p95_latency_ms": 0.898,
+    "read_bw_mbs": 525.11,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt16_ir64_pl4",
+    "qps": 2452.18,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.815,
+    "p95_latency_ms": 0.949,
+    "read_bw_mbs": 996.311,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt24_ir64_pl4",
+    "qps": 2453.99,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.815,
+    "p95_latency_ms": 0.95,
+    "read_bw_mbs": 971.371,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt40_ir128_pl4",
+    "qps": 1607.2,
+    "recall": 0.99396,
+    "avg_latency_ms": 1.244,
+    "p95_latency_ms": 1.481,
+    "read_bw_mbs": 1283.921,
+    "dup_ratio": 0.218413,
+    "req_bytes": 968433.254,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt40_ir32_pl4",
+    "qps": 3373.82,
+    "recall": 0.939825,
+    "avg_latency_ms": 0.593,
+    "p95_latency_ms": 0.679,
+    "read_bw_mbs": 567.72,
+    "dup_ratio": 0.114702,
+    "req_bytes": 244270.285,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt40_ir64_pl4",
+    "qps": 2417.21,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.827,
+    "p95_latency_ms": 0.966,
+    "read_bw_mbs": 902.175,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt40_ir64_pl8",
+    "qps": 2417.79,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.827,
+    "p95_latency_ms": 0.964,
+    "read_bw_mbs": 883.529,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt40_ir96_pl4",
+    "qps": 1941.75,
+    "recall": 0.989219,
+    "avg_latency_ms": 1.03,
+    "p95_latency_ms": 1.214,
+    "read_bw_mbs": 1124.239,
+    "dup_ratio": 0.194313,
+    "req_bytes": 727320.166,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt40_ir96_pl8",
+    "qps": 1937.23,
+    "recall": 0.989219,
+    "avg_latency_ms": 1.032,
+    "p95_latency_ms": 1.218,
+    "read_bw_mbs": 1088.646,
+    "dup_ratio": 0.194313,
+    "req_bytes": 727320.166,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st2_nt64_ir64_pl4",
+    "qps": 2451.58,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.816,
+    "p95_latency_ms": 0.955,
+    "read_bw_mbs": 818.333,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st4_nt40_ir64_pl4",
+    "qps": 4746.08,
+    "recall": 0.978319,
+    "avg_latency_ms": 0.842,
+    "p95_latency_ms": 0.998,
+    "read_bw_mbs": 1458.077,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  },
+  {
+    "run": "st8_nt40_ir64_pl4",
+    "qps": 5959.48,
+    "recall": 0.978319,
+    "avg_latency_ms": 1.341,
+    "p95_latency_ms": 1.597,
+    "read_bw_mbs": 1612.909,
+    "dup_ratio": 0.162538,
+    "req_bytes": 486076.826,
+    "conclusion": "读取放大显著，且与延迟相关"
+  }
+]

@@ -1,0 +1,13 @@
+run	search_thread_num	number_of_threads	internal_result_num	search_posting_page_limit
+st2_nt40_ir64_pl4	2	40	64	4
+st1_nt40_ir64_pl4	1	40	64	4
+st4_nt40_ir64_pl4	4	40	64	4
+st8_nt40_ir64_pl4	8	40	64	4
+st2_nt16_ir64_pl4	2	16	64	4
+st2_nt24_ir64_pl4	2	24	64	4
+st2_nt64_ir64_pl4	2	64	64	4
+st2_nt40_ir32_pl4	2	40	32	4
+st2_nt40_ir96_pl4	2	40	96	4
+st2_nt40_ir128_pl4	2	40	128	4
+st2_nt40_ir64_pl8	2	40	64	8
+st2_nt40_ir96_pl8	2	40	96	8
