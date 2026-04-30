@@ -59,7 +59,7 @@ make -j$(nproc)
 
 ### 2.1 数据集格式
 
-本次测试使用 SIFT1M 数据集，位于 `/media/ray/1tb/sift1m/` 目录。
+本次测试使用 SIFT1M 数据集，位于 `/home/ray/data/sift1m/` 目录。
 
 **文件结构：**
 ```
@@ -137,15 +137,15 @@ ValueType=Float
 DistCalcMethod=L2
 IndexAlgoType=BKT
 Dim=128
-VectorPath=/media/ray/1tb/sift1m/sift_base.fvecs
+VectorPath=/home/ray/data/sift1m/sift_base.fvecs
 VectorType=XVEC
-QueryPath=/media/ray/1tb/sift1m/sift_query.fvecs
+QueryPath=/home/ray/data/sift1m/sift_query.fvecs
 QueryType=XVEC
-WarmupPath=/media/ray/1tb/sift1m/sift_query.fvecs
+WarmupPath=/home/ray/data/sift1m/sift_query.fvecs
 WarmupType=XVEC
-TruthPath=/media/ray/1tb/sift1m/sift_groundtruth.ivecs
+TruthPath=/home/ray/data/sift1m/sift_groundtruth.ivecs
 TruthType=XVEC
-IndexDirectory=/media/ray/1tb/sift1m/spann_index
+IndexDirectory=/home/ray/data/sift1m/spann_index
 
 [SelectHead]
 isExecute=true
@@ -382,14 +382,14 @@ ValueType=Float
 DistCalcMethod=L2
 IndexAlgoType=BKT
 Dim=128
-VectorPath=/media/ray/1tb/sift1m/sift_base.fvecs
+VectorPath=/home/ray/data/sift1m/sift_base.fvecs
 VectorType=XVEC
-QueryPath=/media/ray/1tb/sift1m/sift_query.fvecs
+QueryPath=/home/ray/data/sift1m/sift_query.fvecs
 QueryType=XVEC
-TruthPath=/media/ray/1tb/sift1m/sift_groundtruth.ivecs
+TruthPath=/home/ray/data/sift1m/sift_groundtruth.ivecs
 TruthType=XVEC
-IndexDirectory=/media/ray/1tb/sift1m/spann_index
-SearchResult=/media/ray/1tb/sift1m/search_results.bin
+IndexDirectory=/home/ray/data/sift1m/spann_index
+SearchResult=/home/ray/data/sift1m/search_results.bin
 
 [SelectHead]
 isExecute=false
@@ -590,14 +590,14 @@ ResultNum=10
 
 **方式三：完整命令行**
 ```bash
-./spann_monitor.sh -d /media/ray/1tb -o metrics.csv -l experiment.log -- ./Release/ssdserving config.ini
+./spann_monitor.sh -d /home/ray/data/sift1m -o metrics.csv -l experiment.log -- ./Release/ssdserving config.ini
 ```
 
 ### 6.3 命令行参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-d, --disk` | 监控的磁盘挂载点 | `/media/ray/1tb` |
+| `-d, --disk` | 监控的磁盘挂载点 | `/home/ray/data/sift1m` |
 | `-o, --output` | CSV 输出文件 | `spann_monitor.csv` |
 | `-l, --log` | LOG 输出文件 | `spann_monitor.log` |
 | `-i, --interval` | 采样间隔（秒） | `1` |
@@ -704,7 +704,7 @@ set -e
 
 SPTAG_ROOT="/home/ray/code/SPTAG"
 SSDSERVING="${SPTAG_ROOT}/Release/ssdserving"
-DATA_DIR="/media/ray/1tb/sift1m"
+DATA_DIR="/home/ray/data/sift1m"
 INDEX_DIR="${DATA_DIR}/spann_index"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="${SPTAG_ROOT}/spann_benchmark_${TIMESTAMP}.log"

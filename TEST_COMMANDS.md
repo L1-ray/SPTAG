@@ -36,8 +36,8 @@ SIFT1M 的 ground truth 文件需要转换为 SPTAG 兼容格式：
 
 ```bash
 python3 /home/ray/code/SPTAG/scripts/convert_groundtruth.py \
-    /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
-    /media/ray/1tb/sift1m/sift_groundtruth_sptag \
+    /home/ray/data/sift1m/sift_groundtruth.ivecs \
+    /home/ray/data/sift1m/sift_groundtruth_sptag \
     --format default --k 100
 ```
 
@@ -51,14 +51,14 @@ python3 /home/ray/code/SPTAG/scripts/convert_groundtruth.py \
 cd /home/ray/code/SPTAG
 
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/build/bkt_build_8t_nocache.csv \
     -l results/build/bkt_build_8t_nocache.log \
     -C \
     -- ./Release/indexbuilder \
         -d 128 -v Float -f XVEC \
-        -i /media/ray/1tb/sift1m/sift_base.fvecs \
-        -o /media/ray/1tb/sift1m/bkt_memory_index_8t \
+        -i /home/ray/data/sift1m/sift_base.fvecs \
+        -o /home/ray/data/sift1m/bkt_memory_index_8t \
         -a BKT \
         -c config/bkt_build.ini \
         "Index.NumberOfThreads=8"
@@ -70,14 +70,14 @@ cd /home/ray/code/SPTAG
 cd /home/ray/code/SPTAG
 
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/build/bkt_build_16t_nocache.csv \
     -l results/build/bkt_build_16t_nocache.log \
     -C \
     -- ./Release/indexbuilder \
         -d 128 -v Float -f XVEC \
-        -i /media/ray/1tb/sift1m/sift_base.fvecs \
-        -o /media/ray/1tb/sift1m/bkt_memory_index_16t \
+        -i /home/ray/data/sift1m/sift_base.fvecs \
+        -o /home/ray/data/sift1m/bkt_memory_index_16t \
         -a BKT \
         -c config/bkt_build.ini \
         "Index.NumberOfThreads=14"
@@ -93,14 +93,14 @@ for threads in 8 16; do
     echo "构建测试 ${threads} 线程..."
     echo "=========================================="
     ./scripts/sptag_memory_monitor.sh \
-        -d /media/ray/1tb \
+        -d /home/ray/data/sift1m \
         -o results/build/bkt_build_${threads}t_nocache.csv \
         -l results/build/bkt_build_${threads}t_nocache.log \
         -C \
         -- ./Release/indexbuilder \
             -d 128 -v Float -f XVEC \
-            -i /media/ray/1tb/sift1m/sift_base.fvecs \
-            -o /media/ray/1tb/sift1m/bkt_memory_index_${threads}t \
+            -i /home/ray/data/sift1m/sift_base.fvecs \
+            -o /home/ray/data/sift1m/bkt_memory_index_${threads}t \
             -a BKT \
             -c config/bkt_build.ini \
             "Index.NumberOfThreads=${threads}"
@@ -138,15 +138,15 @@ done
 cd /home/ray/code/SPTAG
 
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/search/bkt_search_8t_m8192_nocache.csv \
     -l results/search/bkt_search_8t_m8192_nocache.log \
     -C \
     -- ./Release/indexsearcher \
         -d 128 -v Float -f XVEC \
-        -i /media/ray/1tb/sift1m/sift_query.fvecs \
-        -x /media/ray/1tb/sift1m/bkt_memory_index_8t \
-        -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin \
+        -i /home/ray/data/sift1m/sift_query.fvecs \
+        -x /home/ray/data/sift1m/bkt_memory_index_8t \
+        -r /home/ray/data/sift1m/sift_groundtruth_sptag.bin \
         -m 8192 \
         -k 32 \
         -t 8
@@ -158,15 +158,15 @@ cd /home/ray/code/SPTAG
 cd /home/ray/code/SPTAG
 
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/search/bkt_search_8t_multi_nocache.csv \
     -l results/search/bkt_search_8t_multi_nocache.log \
     -C \
     -- ./Release/indexsearcher \
         -d 128 -v Float -f XVEC \
-        -i /media/ray/1tb/sift1m/sift_query.fvecs \
-        -x /media/ray/1tb/sift1m/bkt_memory_index_8t \
-        -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin \
+        -i /home/ray/data/sift1m/sift_query.fvecs \
+        -x /home/ray/data/sift1m/bkt_memory_index_8t \
+        -r /home/ray/data/sift1m/sift_groundtruth_sptag.bin \
         -m "1024#2048#4096#8192" \
         -k 32 \
         -t 8
@@ -182,15 +182,15 @@ for threads in 8 16; do
     echo "搜索测试 ${threads} 线程..."
     echo "=========================================="
     ./scripts/sptag_memory_monitor.sh \
-        -d /media/ray/1tb \
+        -d /home/ray/data/sift1m \
         -o results/search/bkt_search_${threads}t_nocache.csv \
         -l results/search/bkt_search_${threads}t_nocache.log \
         -C \
         -- ./Release/indexsearcher \
             -d 128 -v Float -f XVEC \
-            -i /media/ray/1tb/sift1m/sift_query.fvecs \
-            -x /media/ray/1tb/sift1m/bkt_memory_index_${threads}t \
-            -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin \
+            -i /home/ray/data/sift1m/sift_query.fvecs \
+            -x /home/ray/data/sift1m/bkt_memory_index_${threads}t \
+            -r /home/ray/data/sift1m/sift_groundtruth_sptag.bin \
             -m "1024#2048#4096#8192" \
             -k 32 \
             -t ${threads}
@@ -235,14 +235,14 @@ echo "=========================================="
 echo "1. 构建索引 (8线程)..."
 echo "=========================================="
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/build/bkt_build_8t_nocache.csv \
     -l results/build/bkt_build_8t_nocache.log \
     -C \
     -- ./Release/indexbuilder \
         -d 128 -v Float -f XVEC \
-        -i /media/ray/1tb/sift1m/sift_base.fvecs \
-        -o /media/ray/1tb/sift1m/bkt_memory_index_8t \
+        -i /home/ray/data/sift1m/sift_base.fvecs \
+        -o /home/ray/data/sift1m/bkt_memory_index_8t \
         -a BKT \
         -c config/bkt_build.ini \
         "Index.NumberOfThreads=8"
@@ -252,15 +252,15 @@ echo "=========================================="
 echo "2. 搜索测试 (多 MaxCheck)..."
 echo "=========================================="
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/search/bkt_search_8t_nocache.csv \
     -l results/search/bkt_search_8t_nocache.log \
     -C \
     -- ./Release/indexsearcher \
         -d 128 -v Float -f XVEC \
-        -i /media/ray/1tb/sift1m/sift_query.fvecs \
-        -x /media/ray/1tb/sift1m/bkt_memory_index_8t \
-        -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin \
+        -i /home/ray/data/sift1m/sift_query.fvecs \
+        -x /home/ray/data/sift1m/bkt_memory_index_8t \
+        -r /home/ray/data/sift1m/sift_groundtruth_sptag.bin \
         -m "1024#2048#4096#8192" \
         -k 32 \
         -t 8
@@ -281,7 +281,7 @@ echo "=========================================="
 
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
-| `-d, --disk` | 监控的磁盘挂载点 | `/media/ray/1tb` |
+| `-d, --disk` | 监控的磁盘挂载点 | `/home/ray/data/sift1m` |
 | `-o, --output` | 输出 CSV 文件路径 | `sptag_memory_monitor.csv` |
 | `-l, --log` | 输出 LOG 文件路径 | `sptag_memory_monitor.log` |
 | `-i, --interval` | 采样间隔（秒） | `1` |
@@ -301,14 +301,14 @@ cd /home/ray/code/SPTAG
 
 # 带监控的在线模式测试
 ./scripts/sptag_memory_monitor.sh \
-    -d /media/ray/1tb \
+    -d /home/ray/data/sift1m \
     -o results/build/online_test_8t.csv \
     -l results/build/online_test_8t.log \
     -- ./Release/onlinetest \
         -d 128 -v Float -f XVEC \
-        -b /media/ray/1tb/sift1m/sift_base.fvecs \
-        -q /media/ray/1tb/sift1m/sift_query.fvecs \
-        -t /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+        -b /home/ray/data/sift1m/sift_base.fvecs \
+        -q /home/ray/data/sift1m/sift_query.fvecs \
+        -t /home/ray/data/sift1m/sift_groundtruth.ivecs \
         -a BKT -m 8192 -k 32 \
         -t 8
 ```
@@ -321,17 +321,17 @@ cd /home/ray/code/SPTAG
 # 单个搜索模式（性能较低）
 PYTHONPATH=/home/ray/code/SPTAG/Release:$PYTHONPATH \
 python3 scripts/test_online_mode.py \
-    --base /media/ray/1tb/sift1m/sift_base.fvecs \
-    --query /media/ray/1tb/sift1m/sift_query.fvecs \
-    --truth /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    --base /home/ray/data/sift1m/sift_base.fvecs \
+    --query /home/ray/data/sift1m/sift_query.fvecs \
+    --truth /home/ray/data/sift1m/sift_groundtruth.ivecs \
     --threads 8 --k 32 --maxcheck 8192
 
 # 批量搜索模式（性能较高）
 PYTHONPATH=/home/ray/code/SPTAG/Release:$PYTHONPATH \
 python3 scripts/test_online_mode.py \
-    --base /media/ray/1tb/sift1m/sift_base.fvecs \
-    --query /media/ray/1tb/sift1m/sift_query.fvecs \
-    --truth /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    --base /home/ray/data/sift1m/sift_base.fvecs \
+    --query /home/ray/data/sift1m/sift_query.fvecs \
+    --truth /home/ray/data/sift1m/sift_groundtruth.ivecs \
     --threads 8 --k 32 --maxcheck 8192 \
     --batch
 ```
@@ -449,9 +449,9 @@ export PYTHONPATH=/home/ray/code/SPTAG/Release:$PYTHONPATH
 
 # 完整测试（构建 + 搜索）
 python3 scripts/test_online_mode.py \
-    --base /media/ray/1tb/sift1m/sift_base.fvecs \
-    --query /media/ray/1tb/sift1m/sift_query.fvecs \
-    --truth /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    --base /home/ray/data/sift1m/sift_base.fvecs \
+    --query /home/ray/data/sift1m/sift_query.fvecs \
+    --truth /home/ray/data/sift1m/sift_groundtruth.ivecs \
     --threads 8 \
     --k 32 \
     --maxcheck 8192
@@ -461,9 +461,9 @@ python3 scripts/test_online_mode.py \
 
 ```bash
 python3 scripts/test_online_mode.py \
-    --base /media/ray/1tb/sift1m/sift_base.fvecs \
-    --query /media/ray/1tb/sift1m/sift_query.fvecs \
-    --truth /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    --base /home/ray/data/sift1m/sift_base.fvecs \
+    --query /home/ray/data/sift1m/sift_query.fvecs \
+    --truth /home/ray/data/sift1m/sift_groundtruth.ivecs \
     --threads 8 \
     --no-search
 ```
@@ -472,20 +472,20 @@ python3 scripts/test_online_mode.py \
 
 ```bash
 python3 scripts/test_online_mode.py \
-    --base /media/ray/1tb/sift1m/sift_base.fvecs \
-    --query /media/ray/1tb/sift1m/sift_query.fvecs \
-    --truth /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    --base /home/ray/data/sift1m/sift_base.fvecs \
+    --query /home/ray/data/sift1m/sift_query.fvecs \
+    --truth /home/ray/data/sift1m/sift_groundtruth.ivecs \
     --threads 8 \
-    --output /media/ray/1tb/sift1m/online_index
+    --output /home/ray/data/sift1m/online_index
 ```
 
 ### 参数说明
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--base` | 基础向量文件路径 | `/media/ray/1tb/sift1m/sift_base.fvecs` |
-| `--query` | 查询向量文件路径 | `/media/ray/1tb/sift1m/sift_query.fvecs` |
-| `--truth` | Ground truth 文件路径 | `/media/ray/1tb/sift1m/sift_groundtruth.ivecs` |
+| `--base` | 基础向量文件路径 | `/home/ray/data/sift1m/sift_base.fvecs` |
+| `--query` | 查询向量文件路径 | `/home/ray/data/sift1m/sift_query.fvecs` |
+| `--truth` | Ground truth 文件路径 | `/home/ray/data/sift1m/sift_groundtruth.ivecs` |
 | `--threads` | 构建线程数 | 8 |
 | `--k` | 返回的最近邻数量 | 32 |
 | `--maxcheck` | 搜索时最大检查节点数 | 8192 |
@@ -508,9 +508,9 @@ cd /home/ray/code/SPTAG
 
 ./Release/onlinetest \
     -d 128 -v Float -f XVEC \
-    -b /media/ray/1tb/sift1m/sift_base.fvecs \
-    -q /media/ray/1tb/sift1m/sift_query.fvecs \
-    -t /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    -b /home/ray/data/sift1m/sift_base.fvecs \
+    -q /home/ray/data/sift1m/sift_query.fvecs \
+    -t /home/ray/data/sift1m/sift_groundtruth.ivecs \
     -a BKT -m 8192 -k 32 \
     -t 8
 ```
@@ -534,9 +534,9 @@ cd /home/ray/code/SPTAG
 
 ```bash
 python3 scripts/test_online_mode.py \
-    --base /media/ray/1tb/sift1m/sift_base.fvecs \
-    --query /media/ray/1tb/sift1m/sift_query.fvecs \
-    --truth /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
+    --base /home/ray/data/sift1m/sift_base.fvecs \
+    --query /home/ray/data/sift1m/sift_query.fvecs \
+    --truth /home/ray/data/sift1m/sift_groundtruth.ivecs \
     --threads 8 \
     --k 32 \
     --maxcheck 8192 \
@@ -834,7 +834,8 @@ echo "=========================================="
 # 九、SPANN 搜索阶段细粒度 I/O 性能测试与分析（末尾执行版）
 
 > 本节为末尾汇总版。按本节步骤执行即可完成“query 级 + 系统级 + 聚合分析”闭环。  
-> 旧文件 `results/spann_search_16t_nocache.csv/.log` 仅支持粗粒度判断，不足以完成 query 级根因定位。
+> 旧文件 `results/spann_search_16t_nocache.csv/.log` 仅支持粗粒度判断，不足以完成 query 级根因定位。  
+> 当前 canonical SIFT1M workflow 已切换为：**官方参数 + 官方 `UInt8 + DEFAULT` 数据制式 + 本机本地路径**。也就是说，数据格式已严格对齐官方，但路径仍使用本机 `/home/ray/data/sift1m`，而不是官方 AE 的 `/home/sosp/data/...`。
 
 ## 9.1 前置准备
 
@@ -842,25 +843,38 @@ echo "=========================================="
 cd /home/ray/code/SPTAG
 cmake --build build -j8
 lsblk -d -o NAME,SIZE,TYPE
-mkdir -p /home/ray/code/SPTAG/results/io_analysis/16t_nocache
+mkdir -p /home/ray/code/SPTAG/results/io_analysis/sift1m_official_u8default_20260430/baseline_st2_nt40_ir64_pl4
 ```
 
-说明：`lsblk` 用于确认磁盘设备名（例如 `sda` 或 `nvme0n1`）。
+说明：推荐优先使用 `run_io_analysis.sh` 的自动探测（`-p` 或根据 config 自动推断），避免换机后设备名变化导致监控错盘。
 
 ---
 
 ## 9.2 生成分析配置文件
 
-```bash
-cd /home/ray/code/SPTAG
-cp configs/spann_search_only.ini configs/spann_search_io_analysis.ini
-```
+当前规范入口配置：
 
-在 `configs/spann_search_io_analysis.ini` 的 `[SearchSSDIndex]` 里增加：
+- build：`configs/spann_build_only.ini`
+- search + I/O：`configs/spann_search_io_analysis.ini`
+
+其中 baseline 已按“官方参数 + 官方 `UInt8 + DEFAULT` 数据制式 + 本机本地路径”预设为：
 
 ```ini
+ValueType=UInt8
+VectorPath=/home/ray/data/sift1m/bigann1m_base.u8bin
+VectorType=DEFAULT
+QueryPath=/home/ray/data/sift1m/query.public.10K.u8bin
+QueryType=DEFAULT
+TruthPath=/home/ray/data/sift1m/bigann-1M.bin
+TruthType=DEFAULT
+IndexDirectory=/home/ray/data/sift1m/spann_index_official_u8default_20260430
+InternalResultNum=64
+NumberOfThreads=40
+SearchThreadNum=2
+SearchPostingPageLimit=4
+MaxDistRatio=1000000
 EnableDetailedIOStats=true
-DetailedIOStatsOutput=/home/ray/code/SPTAG/results/io_analysis/16t_nocache/query_io_stats.csv
+DetailedIOStatsOutput=/home/ray/code/SPTAG/results/io_analysis/sift1m_official_u8default_20260430/baseline_st2_nt40_ir64_pl4/query_io_stats.csv
 DetailedIOStatsSampleRate=1.0
 ```
 
@@ -874,24 +888,38 @@ QueryCountLimit=200
 
 ## 9.3 一键执行（推荐）
 
+先重建官方参数版本索引：
+
+```bash
+cd /home/ray/code/SPTAG
+./Release/ssdserving configs/spann_build_only.ini
+```
+
+然后执行 baseline 细粒度 I/O 分析：
+
 ```bash
 cd /home/ray/code/SPTAG
 
 bash scripts/run_io_analysis.sh \
   -c configs/spann_search_io_analysis.ini \
-  -d sda \
-  -o results/io_analysis/16t_nocache \
-  -q results/io_analysis/16t_nocache/query_io_stats.csv \
+  -p /home/ray/data/sift1m \
+  -o results/io_analysis/sift1m_official_u8default_20260430/baseline_st2_nt40_ir64_pl4 \
+  -q results/io_analysis/sift1m_official_u8default_20260430/baseline_st2_nt40_ir64_pl4/query_io_stats.csv \
+  -C \
   -i 100
 ```
 
 参数说明：
 
 - `-c`：ssdserving 配置
-- `-d`：磁盘设备名
+- `-d`：显式指定磁盘设备名（可选，覆盖自动探测）
+- `-p`：按数据路径自动探测磁盘设备（推荐）
 - `-o`：输出目录
 - `-q`：query 级 CSV 路径（需与 INI 配置一致）
+- `-C`：每轮测试前清除系统页缓存（推荐开启，保证重跑口径一致）
 - `-i`：系统采样周期（ms）
+
+说明：`-C` 需要 sudo 权限；建议提前配置免密 sudo，避免批量压测中断。
 
 ---
 
@@ -901,14 +929,18 @@ bash scripts/run_io_analysis.sh \
 
 ```bash
 cd /home/ray/code/SPTAG
+sync && echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
 ./Release/ssdserving configs/spann_search_io_analysis.ini > results/io_analysis/16t_nocache/sptag.log 2>&1
 ```
 
 ### 2) 单独监控系统（有 PID 时）
 
 ```bash
+DEVICE=$(df -P /home/ray/data/sift1m | awk 'NR==2 {print $1}')
+DEVICE=$(basename "$(readlink -f "$DEVICE")")
+
 python3 scripts/spann_io_monitor.py \
-  --device sda \
+  --device "$DEVICE" \
   --pid <ssdserving_pid> \
   --interval-ms 100 \
   --device-max-read-mbps 0 \
@@ -996,9 +1028,10 @@ for st in 1 2 4 8 12 16; do
 
     bash scripts/run_io_analysis.sh \
       -c "${run_dir}/config.ini" \
-      -d sda \
+      -p /home/ray/data/sift1m \
       -o "${run_dir}" \
       -q "${run_dir}/query_io_stats.csv" \
+      -C \
       -i 100
   done
 done
@@ -1027,9 +1060,10 @@ for st in 2 4 8 16; do
 
     bash scripts/run_io_analysis.sh \
       -c "${run_dir}/config.ini" \
-      -d sda \
+      -p /home/ray/data/sift1m \
       -o "${run_dir}" \
       -q "${run_dir}/query_io_stats.csv" \
+      -C \
       -i 100
   done
 done
@@ -1110,9 +1144,10 @@ for st in 2 4 8; do
     
     bash scripts/run_io_analysis.sh \
       -c "${run_dir}/config.ini" \
-      -d sda \
+      -p /home/ray/data/sift1m \
       -o "${run_dir}" \
       -q "${run_dir}/query_io_stats.csv" \
+      -C \
       -i 100
   done
 done
@@ -1165,9 +1200,10 @@ for st in 2 4 8; do
   
   bash scripts/run_io_analysis.sh \
     -c "${run_dir}/config.ini" \
-    -d sda \
+    -p /home/ray/data/sift1m \
     -o "${run_dir}" \
     -q "${run_dir}/query_io_stats.csv" \
+    -C \
     -i 100
 done
 
@@ -1239,9 +1275,10 @@ run_test() {
   
   bash scripts/run_io_analysis.sh \
     -c "$run_dir/config.ini" \
-    -d sda \
+    -p /home/ray/data/sift1m \
     -o "$run_dir" \
     -q "$run_dir/query_io_stats.csv" \
+    -C \
     -i 100
 }
 

@@ -59,13 +59,13 @@ SPTAG/
 
 ```bash
 # 单个 MaxCheck 测试
-./scripts/test_bkt_search.sh -x /media/ray/1tb/sift1m/bkt_memory_index_8t -m 8192 -t 8
+./scripts/test_bkt_search.sh -x /home/ray/data/sift1m/bkt_memory_index_8t -m 8192 -t 8
 
 # 多个 MaxCheck 对比测试
-./scripts/test_bkt_search.sh -x /media/ray/1tb/sift1m/bkt_memory_index_8t -m 1024 -m 2048 -m 4096 -m 8192 -t 8
+./scripts/test_bkt_search.sh -x /home/ray/data/sift1m/bkt_memory_index_8t -m 1024 -m 2048 -m 4096 -m 8192 -t 8
 
 # 指定 KNN 数量
-./scripts/test_bkt_search.sh -x /media/ray/1tb/sift1m/bkt_memory_index_8t -m 8192 -k 10 -t 8
+./scripts/test_bkt_search.sh -x /home/ray/data/sift1m/bkt_memory_index_8t -m 8192 -k 10 -t 8
 ```
 
 ### 3.3 完整测试流程
@@ -88,8 +88,8 @@ SPTAG 要求 ground truth 文件使用特定格式。SIFT1M 原始数据使用 i
 ```bash
 # 转换为 SPTAG DEFAULT 格式（推荐）
 python3 scripts/convert_groundtruth.py \
-    /media/ray/1tb/sift1m/sift_groundtruth.ivecs \
-    /media/ray/1tb/sift1m/sift_groundtruth_sptag \
+    /home/ray/data/sift1m/sift_groundtruth.ivecs \
+    /home/ray/data/sift1m/sift_groundtruth_sptag \
     --format default --k 100
 
 # 支持的格式
@@ -108,8 +108,8 @@ ValueType=Float              # 向量值类型: Float, Int8, Int16
 DistCalcMethod=L2            # 距离度量: L2, Cosine
 IndexAlgoType=BKT            # 索引算法: BKT, KDT
 Dim=128                      # 向量维度
-VectorPath=/media/ray/1tb/sift1m/sift_base.fvecs
-IndexDirectory=/media/ray/1tb/sift1m/bkt_memory_index
+VectorPath=/home/ray/data/sift1m/sift_base.fvecs
+IndexDirectory=/home/ray/data/sift1m/bkt_memory_index
 
 [Index]
 ; BKT树参数
@@ -340,26 +340,26 @@ CPU 使用率: 平均 216.1%, 峰值 515.00%
 ```bash
 # 单个 MaxCheck 测试
 ./Release/indexsearcher \
-    -x /media/ray/1tb/sift1m/bkt_memory_index \
-    -i /media/ray/1tb/sift1m/sift_query.fvecs \
-    -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin \
+    -x /home/ray/data/sift1m/bkt_memory_index \
+    -i /home/ray/data/sift1m/sift_query.fvecs \
+    -r /home/ray/data/sift1m/sift_groundtruth_sptag.bin \
     -m 8192 \
     -k 32 \
     -t 8
 
 # 多个 MaxCheck 对比测试（用 # 分隔）
 ./Release/indexsearcher \
-    -x /media/ray/1tb/sift1m/bkt_memory_index \
-    -i /media/ray/1tb/sift1m/sift_query.fvecs \
-    -r /media/ray/1tb/sift1m/sift_groundtruth_sptag.bin \
+    -x /home/ray/data/sift1m/bkt_memory_index \
+    -i /home/ray/data/sift1m/sift_query.fvecs \
+    -r /home/ray/data/sift1m/sift_groundtruth_sptag.bin \
     -m "1024#2048#4096#8192" \
     -k 32 \
     -t 8
 
 # 使用 KEY=VALUE 格式覆盖任意参数
 ./Release/indexsearcher \
-    -x /media/ray/1tb/sift1m/bkt_memory_index \
-    -i /media/ray/1tb/sift1m/sift_query.fvecs \
+    -x /home/ray/data/sift1m/bkt_memory_index \
+    -i /home/ray/data/sift1m/sift_query.fvecs \
     "Index.MaxCheck=4096" \
     "Index.NumberOfThreads=16"
 ```

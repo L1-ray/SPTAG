@@ -1,0 +1,1 @@
+sample_start_ns,sample_end_ns,cpu_idle_percent,cpu_iowait_percent,total_jiffies_delta,idle_jiffies_delta,iowait_jiffies_delta

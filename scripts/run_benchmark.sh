@@ -107,7 +107,7 @@ echo "KNN: ${KNN}"
 echo "清除缓存: ${CLEAR_CACHE}"
 echo ""
 
-DATA_DIR="/media/ray/1tb/sift1m"
+DATA_DIR="/home/ray/data/sift1m"
 
 # 构建测试
 if [[ "$SEARCH_ONLY" != true ]]; then

@@ -116,7 +116,7 @@ def clamp_non_negative(value: float) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="SPANN system-level I/O monitor")
-    parser.add_argument("--device", required=True, help="disk device name, e.g. nvme0n1 or sda")
+    parser.add_argument("--device", required=True, help="disk device name, e.g. nvme0n1, nvme0n1p8, sda")
     parser.add_argument("--pid", required=True, type=int, help="target process PID")
     parser.add_argument("--interval-ms", type=int, default=100, help="sampling interval in milliseconds")
     parser.add_argument("--device-max-read-mbps", type=float, default=0.0, help="device baseline read bandwidth (MB/s)")

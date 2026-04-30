@@ -6,7 +6,7 @@ set -e
 
 # ============ 配置区域 ============
 SPTAG_ROOT="/home/ray/code/SPTAG"
-DATA_DIR="/media/ray/1tb/sift1m"
+DATA_DIR="/home/ray/data/sift1m"
 CONFIG_DIR="${SPTAG_ROOT}/config"
 SCRIPTS_DIR="${SPTAG_ROOT}/scripts"
 RESULTS_DIR="${SPTAG_ROOT}/results/build"

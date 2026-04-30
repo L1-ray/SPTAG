@@ -22,7 +22,7 @@
 
 - 配置文件：`/home/ray/code/SPTAG/spann_build_only.ini`
 - 程序：`/home/ray/code/SPTAG/Release/ssdserving`
-- 索引目录：`/media/ray/1tb/sift1m/spann_index`
+- 索引目录：`/home/ray/data/sift1m/spann_index`
 - 数据集：`sift1m`
 
 对应日志位置：
@@ -86,9 +86,9 @@
 - `DistCalcMethod = L2`
 - `IndexAlgoType = BKT`
 - `ValueType = Float`
-- `VectorPath = /media/ray/1tb/sift1m/sift_base.fvecs`
-- `QueryPath = /media/ray/1tb/sift1m/sift_query.fvecs`
-- `TruthPath = /media/ray/1tb/sift1m/sift_groundtruth.ivecs`
+- `VectorPath = /home/ray/data/sift1m/sift_base.fvecs`
+- `QueryPath = /home/ray/data/sift1m/sift_query.fvecs`
+- `TruthPath = /home/ray/data/sift1m/sift_groundtruth.ivecs`
 
 解释：
 

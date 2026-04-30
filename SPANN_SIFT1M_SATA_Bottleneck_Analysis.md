@@ -4,7 +4,7 @@
 
 - 数据集：SIFT1M，100万个向量，128维度。
 - 存储：SATA SSD。
-- 索引：位于 `/media/ray/1tb/sift1m/spann_index` 的 SPANN 磁盘索引。
+- 索引：位于 `/home/ray/data/sift1m/spann_index` 的 SPANN 磁盘索引。
 - 测试模式：启用 BATCH_READ。
 - 结果路径：`results/io_analysis/sweep_quick`。
 

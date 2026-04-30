@@ -6,7 +6,7 @@
 set -o pipefail
 
 # ============ 默认参数 ============
-DEFAULT_DISK="/media/ray/1tb"        # 默认监控磁盘（数据存储位置）
+DEFAULT_DISK="/home/ray/data/sift1m" # 默认监控磁盘（数据存储位置，可传目录或挂载点）
 DEFAULT_OUTPUT="sptag_memory_monitor.csv"   # 默认 CSV 输出
 DEFAULT_LOG="sptag_memory_monitor.log"      # 默认 LOG 输出
 DEFAULT_INTERVAL=1                   # 默认采样间隔(秒)
@@ -136,33 +136,25 @@ parse_args() {
 get_disk_device() {
     local mount_point="$1"
     local device_path
-    device_path=$(df "$mount_point" 2>/dev/null | awk 'NR==2 {print $1}')
+    device_path=$(df -P "$mount_point" 2>/dev/null | awk 'NR==2 {print $1}')
 
     if [[ -z "$device_path" ]]; then
-        echo "警告: 无法找到挂载点 $mount_point 对应的设备，使用默认设备 sda"
-        DISK_DEVICE="sda"
-        return
+        echo "错误: 无法找到路径 $mount_point 对应的设备，请通过 -d 指定有效的数据路径或挂载点" >&2
+        exit 1
     fi
 
-    local device_name
-    device_name=$(basename "$device_path")
-
-    # 处理分区名
-    if [[ "$device_name" =~ ^nvme ]]; then
-        DISK_DEVICE=$(echo "$device_name" | sed 's/p[0-9]*$//')
-    elif [[ "$device_name" =~ ^sd || "$device_name" =~ ^hd || "$device_name" =~ ^vd ]]; then
-        DISK_DEVICE=$(echo "$device_name" | sed 's/[0-9]*$//')
-    else
-        DISK_DEVICE="$device_name"
+    if [[ "$device_path" == /dev/* ]]; then
+        device_path=$(readlink -f "$device_path")
     fi
+    DISK_DEVICE=$(basename "$device_path")
 
-    echo "检测到磁盘设备: $DISK_DEVICE (挂载点: $mount_point)"
+    echo "检测到磁盘设备: $DISK_DEVICE (路径: $mount_point)"
 }
 
 # ============ 读取磁盘 I/O ============
 get_disk_io() {
     local device="$1"
-    local stat_file="/sys/block/$device/stat"
+    local stat_file="/sys/class/block/$device/stat"
 
     if [[ ! -f "$stat_file" ]]; then
         echo "0 0"

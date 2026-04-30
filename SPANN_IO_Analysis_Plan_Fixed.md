@@ -560,8 +560,11 @@ read_bandwidth_utilization
 脚本参数建议：
 
 ```bash
+DEVICE=$(df -P /home/ray/data/sift1m | awk 'NR==2 {print $1}')
+DEVICE=$(basename "$(readlink -f "$DEVICE")")
+
 python3 scripts/spann_io_monitor.py \
-  --device nvme0n1 \
+  --device "$DEVICE" \
   --pid <sptag_pid> \
   --interval-ms 100 \
   --device-max-read-mbps 3500 \
@@ -927,8 +930,11 @@ sample_count: 1165
 head -n 5 results/query_io_stats.csv
 
 # 验证监控脚本
+DEVICE=$(df -P /home/ray/data/sift1m | awk 'NR==2 {print $1}')
+DEVICE=$(basename "$(readlink -f "$DEVICE")")
+
 python3 scripts/spann_io_monitor.py \
-  --device nvme0n1 \
+  --device "$DEVICE" \
   --pid $$ \
   --interval-ms 100 \
   --device-max-read-mbps 3500 \

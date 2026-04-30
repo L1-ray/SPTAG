@@ -2,31 +2,31 @@
 
 ## 输入概览
 - query_rows: 10000
-- disk_rows: 1226
-- process_rows: 1225
-- cpu_rows: 1226
-- psi_rows: 1226
-- log_qps: 81.990
+- disk_rows: 609
+- process_rows: 608
+- cpu_rows: 609
+- psi_rows: 609
+- log_qps: 166.580
 - log_total_runtime_s: 0.000
 - log_search_stage_s: 0.000
 - log_read_mb: 0.000
 
 ## 瓶颈分析
 - 结论: **存在混合瓶颈，I/O 不是唯一主导**
-- avg_latency_ms: 48.744
-- p95_latency_ms: 58.208
-- p99_latency_ms: 64.057
+- avg_latency_ms: 24.009
+- p95_latency_ms: 31.411
+- p99_latency_ms: 34.771
 - avg_io_wait_ms: 0.000
 - io_wait_ratio: 0.000
-- corr(latency, requested_bytes): 0.062
-- corr(latency, avg_queue_depth): -0.349
+- corr(latency, requested_bytes): 0.073
+- corr(latency, avg_queue_depth): -0.271
 
 ## 系统级信号
-- avg_read_bandwidth_mbs: 60.997
-- avg_cpu_iowait_percent: 0.049
-- psi_io_some_delta_us: 60452
-- psi_io_full_delta_us: 56647
-- process_read_bytes_delta: 7920295936
+- avg_read_bandwidth_mbs: 131.592
+- avg_cpu_iowait_percent: 10.246
+- psi_io_some_delta_us: 19006713
+- psi_io_full_delta_us: 17902300
+- process_read_bytes_delta: 8488185856
 
 ## 查询级效率指标
 - avg_duplicate_vector_read_ratio: 0.118684

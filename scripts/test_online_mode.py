@@ -61,13 +61,13 @@ def calculate_recall(results, ground_truth, k):
 def main():
     parser = argparse.ArgumentParser(description='SPTAG 在线模式性能测试')
     parser.add_argument('--base', type=str,
-                        default='/media/ray/1tb/sift1m/sift_base.fvecs',
+                        default='/home/ray/data/sift1m/sift_base.fvecs',
                         help='基础向量文件路径')
     parser.add_argument('--query', type=str,
-                        default='/media/ray/1tb/sift1m/sift_query.fvecs',
+                        default='/home/ray/data/sift1m/sift_query.fvecs',
                         help='查询向量文件路径')
     parser.add_argument('--truth', type=str,
-                        default='/media/ray/1tb/sift1m/sift_groundtruth.ivecs',
+                        default='/home/ray/data/sift1m/sift_groundtruth.ivecs',
                         help='Ground truth 文件路径')
     parser.add_argument('--threads', type=int, default=8,
                         help='构建线程数')
