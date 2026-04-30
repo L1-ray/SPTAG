@@ -135,6 +135,15 @@ namespace SPTAG {
             bool m_enableDetailedIOStats;
             std::string m_detailedIOStatsOutput;
             double m_detailedIOStatsSampleRate;
+            int m_ssdPostingFormatVersion;
+            bool m_enableTwoStagePosting;
+            bool m_enableChunkedPosting;
+            std::string m_postingCodeType;
+            int m_postingTopRPerPosting;
+            int m_postingTopRGlobal;
+            int m_postingChunkTargetSize;
+            std::string m_postingChunkPruneMode;
+            int m_postingPayloadBatchPages;
 
             int m_searchThreadNum;
 

@@ -6,6 +6,7 @@
 
 #include "inc/Helper/VectorSetReader.h"
 #include "inc/Helper/AsyncFileReader.h"
+#include "inc/Helper/SimpleIniReader.h"
 #include "IExtraSearcher.h"
 #include "inc/Core/Common/TruthSet.h"
 #include "Compressor.h"
@@ -81,6 +82,16 @@ namespace SPTAG
                 }
                 return m_selections[offset - m_start];
             }
+        };
+
+        struct PostingFormatMetadata
+        {
+            bool m_exists = false;
+            int m_formatVersion = 0;
+            std::string m_layoutType = "legacy";
+            std::string m_codeType = "None";
+            std::string m_chunkPruneMode = "None";
+            std::string m_payloadLayout = "legacy_full_vector";
         };
 
 #define DecompressPosting(){\
@@ -193,6 +204,15 @@ namespace SPTAG
 
             virtual bool LoadIndex(Options& p_opt, COMMON::VersionLabel& p_versionMap, COMMON::Dataset<std::uint64_t>& p_vectorTranslateMap,  std::shared_ptr<VectorIndex> m_index) {
                 m_extraFullGraphFile = p_opt.m_indexDirectory + FolderSep + p_opt.m_ssdIndex;
+                m_postingFormatMetadata = LoadPostingFormatMetadata(m_extraFullGraphFile);
+                if (m_postingFormatMetadata.m_exists && !Helper::StrUtils::StrEqualIgnoreCase(m_postingFormatMetadata.m_layoutType.c_str(), "legacy")) {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                                 "Posting metadata %s declares unsupported layout %s. New static posting parsing is not implemented yet.\n",
+                                 GetPostingMetadataFilePath(m_extraFullGraphFile).c_str(),
+                                 m_postingFormatMetadata.m_layoutType.c_str());
+                    return false;
+                }
+
                 std::string curFile = m_extraFullGraphFile;
                 p_opt.m_searchPostingPageLimit = max(p_opt.m_searchPostingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * (p_opt.m_dim * sizeof(ValueType) + sizeof(int)) + PageSize - 1) / PageSize));
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Load index with posting page limit:%d\n", p_opt.m_searchPostingPageLimit);
@@ -1160,6 +1180,7 @@ namespace SPTAG
                         curPostingListOffSet);
                 }
 
+                SavePostingFormatMetadata(outputFile);
                 p_versionMap.Save(p_opt.m_indexDirectory + FolderSep + p_opt.m_deleteIDFile);
 
                 auto t5 = std::chrono::high_resolution_clock::now();
@@ -1286,7 +1307,7 @@ namespace SPTAG
             struct ListInfo
             {
                 std::size_t listTotalBytes = 0;
-                
+
                 int listEleCount = 0;
 
                 std::uint16_t listPageCount = 0;
@@ -1295,6 +1316,65 @@ namespace SPTAG
 
                 std::uint16_t pageOffset = 0;
             };
+
+            std::string GetPostingMetadataFilePath(const std::string& p_ssdIndexFile) const
+            {
+                return p_ssdIndexFile + ".meta";
+            }
+
+            PostingFormatMetadata LoadPostingFormatMetadata(const std::string& p_ssdIndexFile)
+            {
+                PostingFormatMetadata metadata;
+                std::string metaFile = GetPostingMetadataFilePath(p_ssdIndexFile);
+                if (!fileexists(metaFile.c_str())) {
+                    return metadata;
+                }
+
+                Helper::IniReader reader;
+                if (reader.LoadIniFile(metaFile) != ErrorCode::Success) {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to load posting metadata file: %s\n", metaFile.c_str());
+                    throw std::runtime_error("Failed to load posting metadata file");
+                }
+
+                metadata.m_exists = true;
+                auto magic = reader.GetParameter<std::string>("Meta", "Magic", std::string());
+                if (!Helper::StrUtils::StrEqualIgnoreCase(magic.c_str(), "SPTAG_SSD_POSTING_META_V1")) {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Unknown posting metadata magic in %s\n", metaFile.c_str());
+                    throw std::runtime_error("Unknown posting metadata magic");
+                }
+
+                metadata.m_formatVersion = reader.GetParameter<int>("Meta", "FormatVersion", 0);
+                metadata.m_layoutType = reader.GetParameter<std::string>("Meta", "LayoutType", std::string("legacy"));
+                metadata.m_codeType = reader.GetParameter<std::string>("Meta", "CodeType", std::string("None"));
+                metadata.m_chunkPruneMode = reader.GetParameter<std::string>("Meta", "ChunkPruneMode", std::string("None"));
+                metadata.m_payloadLayout = reader.GetParameter<std::string>("Meta", "PayloadLayout", std::string("legacy_full_vector"));
+                return metadata;
+            }
+
+            void SavePostingFormatMetadata(const std::string& p_ssdIndexFile)
+            {
+                std::string metaFile = GetPostingMetadataFilePath(p_ssdIndexFile);
+                auto ptr = SPTAG::f_createIO();
+                if (ptr == nullptr || !ptr->Initialize(metaFile.c_str(), std::ios::binary | std::ios::out)) {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open posting metadata file %s\n", metaFile.c_str());
+                    throw std::runtime_error("Failed to open posting metadata file");
+                }
+
+                auto writeLine = [&](const std::string& line) {
+                    if (ptr->WriteString(line.c_str()) == 0) {
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write posting metadata file %s\n", metaFile.c_str());
+                        throw std::runtime_error("Failed to write posting metadata file");
+                    }
+                };
+
+                writeLine("[Meta]\n");
+                writeLine("Magic=SPTAG_SSD_POSTING_META_V1\n");
+                writeLine("FormatVersion=0\n");
+                writeLine("LayoutType=legacy\n");
+                writeLine("CodeType=None\n");
+                writeLine("ChunkPruneMode=None\n");
+                writeLine("PayloadLayout=legacy_full_vector\n");
+            }
 
             int LoadingHeadInfo(const std::string& p_file, int p_postingPageLimit, std::vector<ListInfo>& p_listInfos)
             {
@@ -1852,6 +1932,7 @@ namespace SPTAG
             std::atomic<int> m_workspaceCount = 0;
 
             std::string m_extraFullGraphFile;
+            PostingFormatMetadata m_postingFormatMetadata;
 
             std::vector<ListInfo> m_listInfos;
             bool m_oneContext;

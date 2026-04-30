@@ -27,6 +27,34 @@ std::function<std::shared_ptr<Helper::DiskIO>(void)> f_createAsyncIO = []() -> s
     return std::shared_ptr<Helper::DiskIO>(new Helper::AsyncFileIO());
 };
 
+inline bool UsesExperimentalPostingFormat(const Options& options)
+{
+    return options.m_ssdPostingFormatVersion != 0 || options.m_enableTwoStagePosting || options.m_enableChunkedPosting;
+}
+
+inline ErrorCode ValidatePostingFormatOptions(const Options& options)
+{
+    if (!UsesExperimentalPostingFormat(options)) {
+        return ErrorCode::Success;
+    }
+
+    if (options.m_storage != Storage::STATIC) {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "Two-stage/chunked SSD posting options currently support Storage::Static only.\n");
+        return ErrorCode::Fail;
+    }
+
+    if (options.m_enableChunkedPosting && !options.m_enableTwoStagePosting) {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "EnableChunkedPosting requires EnableTwoStagePosting to be enabled.\n");
+        return ErrorCode::Fail;
+    }
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                 "SSD posting format v2/v3 groundwork is present, but the new static posting path is not implemented yet.\n");
+    return ErrorCode::Fail;
+}
+
 template <typename T> bool Index<T>::CheckHeadIndexType()
 {
     SPTAG::VectorValueType v1 = m_index->GetVectorValueType(), v2 = GetEnumValueType<T>();
@@ -92,6 +120,9 @@ template <typename T> ErrorCode Index<T>::LoadConfig(Helper::IniReader &p_reader
 template <typename T> ErrorCode Index<T>::LoadIndexDataFromMemory(const std::vector<ByteArray> &p_indexBlobs)
 {
     /** Need to modify **/
+    if (ValidatePostingFormatOptions(m_options) != ErrorCode::Success)
+        return ErrorCode::Fail;
+
     m_index->SetQuantizer(m_pQuantizer);
     if (!m_options.m_persistentBufferPath.empty() && !direxists(m_options.m_persistentBufferPath.c_str()))
         mkdir(m_options.m_persistentBufferPath.c_str());
@@ -132,6 +163,9 @@ template <typename T> ErrorCode Index<T>::LoadIndexDataFromMemory(const std::vec
 template <typename T>
 ErrorCode Index<T>::LoadIndexData(const std::vector<std::shared_ptr<Helper::DiskIO>> &p_indexStreams)
 {
+    if (ValidatePostingFormatOptions(m_options) != ErrorCode::Success)
+        return ErrorCode::Fail;
+
     m_index->SetQuantizer(m_pQuantizer);
     if (!m_options.m_persistentBufferPath.empty() && !direxists(m_options.m_persistentBufferPath.c_str()))
         mkdir(m_options.m_persistentBufferPath.c_str());
@@ -1130,6 +1164,9 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Begin Build SSDIndex...\n");
     if (m_options.m_enableSSD)
     {
+        if (ValidatePostingFormatOptions(m_options) != ErrorCode::Success)
+            return ErrorCode::Fail;
+
         if (m_index == nullptr && LoadIndex(m_options.m_indexDirectory + FolderSep + m_options.m_headIndexFolder,
                                             m_index) != ErrorCode::Success)
         {

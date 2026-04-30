@@ -205,6 +205,12 @@ namespace SPTAG::SPANN {
     public:
         ExtraDynamicSearcher(SPANN::Options& p_opt) {
             m_opt = &p_opt;
+            if (p_opt.m_ssdPostingFormatVersion != 0 || p_opt.m_enableTwoStagePosting || p_opt.m_enableChunkedPosting) {
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                             "Two-stage/chunked SSD posting options are not supported for dynamic storage.\n");
+                return;
+            }
+
             m_metaDataSize = sizeof(int) + sizeof(uint8_t);
             m_vectorInfoSize = p_opt.m_dim * sizeof(ValueType) + m_metaDataSize;
             p_opt.m_postingPageLimit = max(p_opt.m_postingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * m_vectorInfoSize + PageSize - 1) / PageSize));
