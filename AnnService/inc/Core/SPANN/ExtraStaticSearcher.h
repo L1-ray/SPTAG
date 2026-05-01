@@ -1759,6 +1759,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         auto &requestByPage = p_exWorkSpace->m_payloadPageRequestIndex;
         requestByPage.clear();
         requestByPage.reserve(p_exWorkSpace->m_mergedCandidates.size() * 2);
+
         size_t maxPayloadBytes = 0;
         for (auto &candidate : p_exWorkSpace->m_mergedCandidates)
         {
@@ -1770,7 +1771,6 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 continue;
             }
 
-            const PostingBlockInfo &block = p_exWorkSpace->m_postingBlocks[candidate.m_blockIndex];
             const ListInfo &listInfo = m_listInfos[candidate.m_postingID];
             const uint64_t payloadPhysicalOffset = candidate.m_payloadPhysicalOffset;
             const uint64_t payloadPhysicalEnd = payloadPhysicalOffset + static_cast<uint64_t>(candidate.m_payloadBytes);
@@ -1786,9 +1786,10 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 return ErrorCode::Fail;
             }
 
-            const uint32_t startPageID = static_cast<uint32_t>(payloadPhysicalOffset >> PageSizeEx);
+            const uint32_t startPageID = candidate.m_payloadPageID;
             const uint32_t endPageID = static_cast<uint32_t>((payloadPhysicalEnd - 1) >> PageSizeEx);
             candidate.m_payloadPageCount = endPageID - startPageID + 1;
+
             for (uint32_t pageID = startPageID; pageID <= endPageID; ++pageID)
             {
                 const uint64_t pageKey = GetPostingPageKey(candidate.m_postingID, pageID);
@@ -1812,16 +1813,46 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
 
         p_exWorkSpace->EnsurePayloadScratchCapacity(maxPayloadBytes);
 
-        std::sort(p_exWorkSpace->m_payloadReadRequests.begin(), p_exWorkSpace->m_payloadReadRequests.end(),
-                  [this](const PayloadReadRequest &lhs, const PayloadReadRequest &rhs) {
-                      const int lhsFileId = m_oneContext ? 0 : lhs.m_postingID / m_listPerFile;
-                      const int rhsFileId = m_oneContext ? 0 : rhs.m_postingID / m_listPerFile;
+        if (p_exWorkSpace->m_payloadReadRequests.empty())
+        {
+            if (p_stats)
+            {
+                p_stats->m_payloadLogicalBytesRead = 0;
+                p_stats->m_payloadBytesRead = 0;
+                p_stats->m_payloadPageHash = 0;
+            }
+            return ErrorCode::Success;
+        }
+
+        std::vector<size_t> originalToSorted;
+        originalToSorted.resize(p_exWorkSpace->m_payloadReadRequests.size());
+        for (size_t i = 0; i < originalToSorted.size(); ++i)
+        {
+            originalToSorted[i] = i;
+        }
+        std::sort(originalToSorted.begin(), originalToSorted.end(),
+                  [this, &requests = p_exWorkSpace->m_payloadReadRequests](size_t lhs, size_t rhs) {
+                      const auto &lhsReq = requests[lhs];
+                      const auto &rhsReq = requests[rhs];
+                      const int lhsFileId = m_oneContext ? 0 : lhsReq.m_postingID / m_listPerFile;
+                      const int rhsFileId = m_oneContext ? 0 : rhsReq.m_postingID / m_listPerFile;
                       if (lhsFileId != rhsFileId)
                           return lhsFileId < rhsFileId;
-                      if (lhs.m_pageOffset != rhs.m_pageOffset)
-                          return lhs.m_pageOffset < rhs.m_pageOffset;
-                      return lhs.m_postingID < rhs.m_postingID;
+                      if (lhsReq.m_pageOffset != rhsReq.m_pageOffset)
+                          return lhsReq.m_pageOffset < rhsReq.m_pageOffset;
+                      return lhsReq.m_postingID < rhsReq.m_postingID;
                   });
+
+        std::vector<PayloadReadRequest> sortedRequests;
+        sortedRequests.reserve(p_exWorkSpace->m_payloadReadRequests.size());
+        std::vector<size_t> originalToSortedIndex(originalToSorted.size());
+        for (size_t sortedIdx = 0; sortedIdx < originalToSorted.size(); ++sortedIdx)
+        {
+            size_t origIdx = originalToSorted[sortedIdx];
+            originalToSortedIndex[origIdx] = sortedIdx;
+            sortedRequests.emplace_back(p_exWorkSpace->m_payloadReadRequests[origIdx]);
+        }
+        p_exWorkSpace->m_payloadReadRequests = std::move(sortedRequests);
 
         requestByPage.clear();
         requestByPage.reserve(p_exWorkSpace->m_payloadReadRequests.size());
@@ -1836,7 +1867,6 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             {
                 continue;
             }
-
             if (candidate.m_payloadPageCount == 0)
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
@@ -1854,7 +1884,6 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                              candidate.m_postingID, candidate.m_payloadPageID);
                 return ErrorCode::Fail;
             }
-
             candidate.m_payloadRequestStart = requestIter->second;
         }
 
