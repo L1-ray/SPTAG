@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "inc/Core/SPANN/Index.h"
-#include "inc/Helper/VectorSetReaders/MemoryReader.h"
 #include "inc/Core/SPANN/ExtraDynamicSearcher.h"
 #include "inc/Core/SPANN/ExtraStaticSearcher.h"
+#include "inc/Core/SPANN/Index.h"
+#include "inc/Helper/SimpleIniReader.h"
+#include "inc/Helper/VectorSetReaders/MemoryReader.h"
+#include <cctype>
 #include <chrono>
 #include <random>
 #include <shared_mutex>
@@ -27,32 +29,327 @@ std::function<std::shared_ptr<Helper::DiskIO>(void)> f_createAsyncIO = []() -> s
     return std::shared_ptr<Helper::DiskIO>(new Helper::AsyncFileIO());
 };
 
-inline bool UsesExperimentalPostingFormat(const Options& options)
+inline bool UsesExperimentalPostingFormat(const Options &options)
 {
     return options.m_ssdPostingFormatVersion != 0 || options.m_enableTwoStagePosting || options.m_enableChunkedPosting;
 }
 
-inline ErrorCode ValidatePostingFormatOptions(const Options& options)
+inline bool UsesTwoStageStaticPosting(const Options &options)
 {
-    if (!UsesExperimentalPostingFormat(options)) {
+    return options.m_storage == Storage::STATIC && options.m_ssdPostingFormatVersion >= 2 &&
+           options.m_enableTwoStagePosting;
+}
+
+struct StaticPostingRuntimeFormat
+{
+    bool m_sidecarExists = false;
+    bool m_hasUnsupportedLayout = false;
+    bool m_isTwoStage = false;
+    bool m_isChunked = false;
+    std::string m_layoutType = "legacy";
+};
+
+enum class ChunkPruneModeKind
+{
+    None,
+    HeuristicL2,
+    Invalid
+};
+
+inline std::string TrimCopy(const std::string &value)
+{
+    size_t begin = 0;
+    while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])))
+        ++begin;
+    size_t end = value.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])))
+        --end;
+    return value.substr(begin, end - begin);
+}
+
+inline ChunkPruneModeKind GetChunkPruneModeKind(const std::string &value)
+{
+    std::string pruneMode = TrimCopy(value);
+    if (pruneMode.empty() || Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "None") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "Off") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "False") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "0"))
+    {
+        return ChunkPruneModeKind::None;
+    }
+
+    if (Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "L2") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "Hard") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "Heuristic") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "HeuristicL2") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "True") ||
+        Helper::StrUtils::StrEqualIgnoreCase(pruneMode.c_str(), "1"))
+    {
+        return ChunkPruneModeKind::HeuristicL2;
+    }
+
+    return ChunkPruneModeKind::Invalid;
+}
+
+inline std::string GetPostingMetadataFilePath(const Options &options)
+{
+    return options.m_indexDirectory + FolderSep + options.m_ssdIndex + ".meta";
+}
+
+inline StaticPostingRuntimeFormat LoadStaticPostingRuntimeFormat(const Options &options)
+{
+    StaticPostingRuntimeFormat format;
+    if (options.m_storage != Storage::STATIC || options.m_indexDirectory.empty() || options.m_ssdIndex.empty())
+    {
+        return format;
+    }
+
+    Helper::IniReader reader;
+    if (reader.LoadIniFile(GetPostingMetadataFilePath(options)) != ErrorCode::Success)
+    {
+        return format;
+    }
+
+    format.m_sidecarExists = true;
+    format.m_layoutType = reader.GetParameter("Meta", "LayoutType", std::string("legacy"));
+    const int formatVersion = reader.GetParameter("Meta", "FormatVersion", 0);
+
+    if (Helper::StrUtils::StrEqualIgnoreCase(format.m_layoutType.c_str(), "legacy") || formatVersion <= 0)
+    {
+        return format;
+    }
+
+    if (Helper::StrUtils::StrEqualIgnoreCase(format.m_layoutType.c_str(), "twostage_v1"))
+    {
+        format.m_isTwoStage = true;
+        return format;
+    }
+
+    if (Helper::StrUtils::StrEqualIgnoreCase(format.m_layoutType.c_str(), "chunked_twostage_v1"))
+    {
+        format.m_isTwoStage = true;
+        format.m_isChunked = true;
+        return format;
+    }
+
+    format.m_hasUnsupportedLayout = true;
+    return format;
+}
+
+inline bool UsesTwoStageStaticPostingRuntime(const Options &options)
+{
+    const StaticPostingRuntimeFormat runtimeFormat = LoadStaticPostingRuntimeFormat(options);
+    if (runtimeFormat.m_sidecarExists)
+    {
+        return runtimeFormat.m_isTwoStage;
+    }
+
+    if (options.m_storage == Storage::STATIC && !options.m_indexDirectory.empty() && !options.m_ssdIndex.empty())
+    {
+        const std::string ssdIndexFile = options.m_indexDirectory + FolderSep + options.m_ssdIndex;
+        if (fileexists(ssdIndexFile.c_str()))
+        {
+            return false;
+        }
+    }
+
+    return UsesTwoStageStaticPosting(options);
+}
+
+inline ErrorCode ValidatePostingFormatOptions(const Options &options)
+{
+    if (!UsesExperimentalPostingFormat(options))
+    {
         return ErrorCode::Success;
     }
 
-    if (options.m_storage != Storage::STATIC) {
+    if (options.m_storage != Storage::STATIC)
+    {
         SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
                      "Two-stage/chunked SSD posting options currently support Storage::Static only.\n");
         return ErrorCode::Fail;
     }
 
-    if (options.m_enableChunkedPosting && !options.m_enableTwoStagePosting) {
+    if (options.m_enableChunkedPosting && !options.m_enableTwoStagePosting)
+    {
         SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
                      "EnableChunkedPosting requires EnableTwoStagePosting to be enabled.\n");
         return ErrorCode::Fail;
     }
 
-    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                 "SSD posting format v2/v3 groundwork is present, but the new static posting path is not implemented yet.\n");
-    return ErrorCode::Fail;
+    const ChunkPruneModeKind pruneModeKind = GetChunkPruneModeKind(options.m_postingChunkPruneMode);
+    if (pruneModeKind == ChunkPruneModeKind::Invalid)
+    {
+        if (Helper::StrUtils::StrEqualIgnoreCase(TrimCopy(options.m_postingChunkPruneMode).c_str(), "Safe"))
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                         "PostingChunkPruneMode=Safe is not supported. Current chunk pruning is heuristic, so use "
+                         "L2/HeuristicL2 explicitly if you want it enabled.\n");
+        }
+        else
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Unsupported PostingChunkPruneMode: %s\n",
+                         options.m_postingChunkPruneMode.c_str());
+        }
+        return ErrorCode::Fail;
+    }
+    if (pruneModeKind != ChunkPruneModeKind::None && !options.m_enableChunkedPosting)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "PostingChunkPruneMode requires EnableChunkedPosting to be enabled.\n");
+        return ErrorCode::Fail;
+    }
+    if (pruneModeKind != ChunkPruneModeKind::None && options.m_distCalcMethod != DistCalcMethod::L2)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "PostingChunkPruneMode currently supports L2 distance only.\n");
+        return ErrorCode::Fail;
+    }
+    if (pruneModeKind != ChunkPruneModeKind::None)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Warning,
+                     "PostingChunkPruneMode is heuristic in the current implementation; it does not provide an "
+                     "exact safe-prune guarantee.\n");
+    }
+
+    if (options.m_ssdPostingFormatVersion <= 1)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "Experimental posting format requires SsdPostingFormatVersion >= 2.\n");
+        return ErrorCode::Fail;
+    }
+
+    if (!options.m_enableTwoStagePosting)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "SsdPostingFormatVersion >= 2 requires EnableTwoStagePosting to be enabled.\n");
+        return ErrorCode::Fail;
+    }
+
+    if (options.m_enableDeltaEncoding || options.m_enablePostingListRearrange || options.m_enableDataCompression)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "Phase 1 two-stage posting currently requires delta/rearrange/compression to be disabled.\n");
+        return ErrorCode::Fail;
+    }
+
+    if (options.m_enableChunkedPosting && options.m_postingChunkTargetSize <= 0)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Chunked two-stage posting requires PostingChunkTargetSize > 0.\n");
+        return ErrorCode::Fail;
+    }
+
+    return ErrorCode::Success;
+}
+
+inline ErrorCode ValidatePostingFormatLoadOptions(const Options &options, const StaticPostingRuntimeFormat &format)
+{
+    const ChunkPruneModeKind pruneModeKind = GetChunkPruneModeKind(options.m_postingChunkPruneMode);
+    if (pruneModeKind == ChunkPruneModeKind::Invalid)
+    {
+        if (Helper::StrUtils::StrEqualIgnoreCase(TrimCopy(options.m_postingChunkPruneMode).c_str(), "Safe"))
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                         "PostingChunkPruneMode=Safe is not supported. Current chunk pruning is heuristic, so use "
+                         "L2/HeuristicL2 explicitly if you want it enabled.\n");
+        }
+        else
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Unsupported PostingChunkPruneMode: %s\n",
+                         options.m_postingChunkPruneMode.c_str());
+        }
+        return ErrorCode::Fail;
+    }
+    if (pruneModeKind != ChunkPruneModeKind::None && options.m_distCalcMethod != DistCalcMethod::L2)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "PostingChunkPruneMode currently supports L2 distance only.\n");
+        return ErrorCode::Fail;
+    }
+
+    if (options.m_storage != Storage::STATIC)
+    {
+        if (UsesExperimentalPostingFormat(options))
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                         "Two-stage/chunked SSD posting options currently support Storage::Static only.\n");
+            return ErrorCode::Fail;
+        }
+        return ErrorCode::Success;
+    }
+
+    if (!format.m_sidecarExists)
+    {
+        if (UsesExperimentalPostingFormat(options))
+        {
+            const std::string ssdIndexFile = options.m_indexDirectory + FolderSep + options.m_ssdIndex;
+            if (fileexists(ssdIndexFile.c_str()))
+            {
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Warning,
+                             "Posting sidecar %s is missing; falling back to legacy static posting parser despite "
+                             "config flags.\n",
+                             GetPostingMetadataFilePath(options).c_str());
+            }
+        }
+        return ErrorCode::Success;
+    }
+
+    if (format.m_hasUnsupportedLayout)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Posting metadata %s declares unsupported layout %s.\n",
+                     GetPostingMetadataFilePath(options).c_str(), format.m_layoutType.c_str());
+        return ErrorCode::Fail;
+    }
+
+    if (!format.m_isTwoStage)
+    {
+        return ErrorCode::Success;
+    }
+
+    if (options.m_enableDeltaEncoding || options.m_enablePostingListRearrange || options.m_enableDataCompression)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "Two-stage posting load currently requires delta/rearrange/compression to be disabled.\n");
+        return ErrorCode::Fail;
+    }
+
+    if (pruneModeKind != ChunkPruneModeKind::None && !format.m_isChunked)
+    {
+        SPTAGLIB_LOG(
+            Helper::LogLevel::LL_Warning,
+            "PostingChunkPruneMode is configured but loaded layout is not chunked; pruning will be ignored.\n");
+    }
+    if (pruneModeKind != ChunkPruneModeKind::None && format.m_isChunked)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Warning,
+                     "PostingChunkPruneMode is heuristic in the current implementation; it does not provide an "
+                     "exact safe-prune guarantee.\n");
+    }
+
+    return ErrorCode::Success;
+}
+
+inline uint64_t HashMix(uint64_t seed, uint64_t value)
+{
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+inline uint64_t HashFloatBits(float value)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return static_cast<uint64_t>(bits);
+}
+
+template <typename T> uint64_t ComputeQueryResultHash(const COMMON::QueryResultSet<T> &results)
+{
+    uint64_t hash = 1469598103934665603ULL;
+    for (int i = 0; i < results.GetResultNum(); ++i)
+    {
+        const BasicResult *result = results.GetResult(i);
+        hash = HashMix(hash, static_cast<uint64_t>(result->VID));
+        hash = HashMix(hash, HashFloatBits(result->Dist));
+    }
+    return hash;
 }
 
 template <typename T> bool Index<T>::CheckHeadIndexType()
@@ -88,7 +385,10 @@ template <typename T> void Index<T>::SetQuantizer(std::shared_ptr<SPTAG::COMMON:
     }
     if (m_index)
     {
-        m_index->SetQuantizer(quantizer);
+        if (!(UsesTwoStageStaticPostingRuntime(m_options) && quantizer))
+        {
+            m_index->SetQuantizer(quantizer);
+        }
     }
 }
 
@@ -119,11 +419,14 @@ template <typename T> ErrorCode Index<T>::LoadConfig(Helper::IniReader &p_reader
 
 template <typename T> ErrorCode Index<T>::LoadIndexDataFromMemory(const std::vector<ByteArray> &p_indexBlobs)
 {
-    /** Need to modify **/
-    if (ValidatePostingFormatOptions(m_options) != ErrorCode::Success)
+    const StaticPostingRuntimeFormat runtimeFormat = LoadStaticPostingRuntimeFormat(m_options);
+    if (ValidatePostingFormatLoadOptions(m_options, runtimeFormat) != ErrorCode::Success)
         return ErrorCode::Fail;
 
-    m_index->SetQuantizer(m_pQuantizer);
+    if (!(UsesTwoStageStaticPostingRuntime(m_options) && m_pQuantizer))
+    {
+        m_index->SetQuantizer(m_pQuantizer);
+    }
     if (!m_options.m_persistentBufferPath.empty() && !direxists(m_options.m_persistentBufferPath.c_str()))
         mkdir(m_options.m_persistentBufferPath.c_str());
 
@@ -138,7 +441,7 @@ template <typename T> ErrorCode Index<T>::LoadIndexDataFromMemory(const std::vec
 
     if (m_options.m_storage == Storage::STATIC)
     {
-        if (m_pQuantizer)
+        if (m_pQuantizer && !UsesExperimentalPostingFormat(m_options))
             m_extraSearcher.reset(new ExtraStaticSearcher<std::uint8_t>());
         else
             m_extraSearcher.reset(new ExtraStaticSearcher<T>());
@@ -163,10 +466,14 @@ template <typename T> ErrorCode Index<T>::LoadIndexDataFromMemory(const std::vec
 template <typename T>
 ErrorCode Index<T>::LoadIndexData(const std::vector<std::shared_ptr<Helper::DiskIO>> &p_indexStreams)
 {
-    if (ValidatePostingFormatOptions(m_options) != ErrorCode::Success)
+    const StaticPostingRuntimeFormat runtimeFormat = LoadStaticPostingRuntimeFormat(m_options);
+    if (ValidatePostingFormatLoadOptions(m_options, runtimeFormat) != ErrorCode::Success)
         return ErrorCode::Fail;
 
-    m_index->SetQuantizer(m_pQuantizer);
+    if (!(UsesTwoStageStaticPostingRuntime(m_options) && m_pQuantizer))
+    {
+        m_index->SetQuantizer(m_pQuantizer);
+    }
     if (!m_options.m_persistentBufferPath.empty() && !direxists(m_options.m_persistentBufferPath.c_str()))
         mkdir(m_options.m_persistentBufferPath.c_str());
 
@@ -218,7 +525,7 @@ ErrorCode Index<T>::LoadIndexData(const std::vector<std::shared_ptr<Helper::Disk
 
     if (m_options.m_storage == Storage::STATIC)
     {
-        if (m_pQuantizer)
+        if (m_pQuantizer && !UsesExperimentalPostingFormat(m_options))
             m_extraSearcher.reset(new ExtraStaticSearcher<std::uint8_t>());
         else
             m_extraSearcher.reset(new ExtraStaticSearcher<T>());
@@ -329,12 +636,19 @@ template <typename T> ErrorCode Index<T>::SearchIndex(QueryResult &p_query, bool
     if (!m_bReady)
         return ErrorCode::EmptyIndex;
 
-    COMMON::QueryResultSet<T> *p_queryResults;
+    COMMON::QueryResultSet<T> *p_queryResults = nullptr;
+    std::unique_ptr<COMMON::QueryResultSet<T>> ownedQueryResults;
     if (p_query.GetResultNum() >= m_options.m_searchInternalResultNum)
+    {
         p_queryResults = (COMMON::QueryResultSet<T> *)&p_query;
+    }
     else
-        p_queryResults =
-            new COMMON::QueryResultSet<T>((const T *)p_query.GetTarget(), m_options.m_searchInternalResultNum);
+    {
+        ownedQueryResults =
+            std::make_unique<COMMON::QueryResultSet<T>>((const T *)p_query.GetTarget(),
+                                                        m_options.m_searchInternalResultNum);
+        p_queryResults = ownedQueryResults.get();
+    }
 
     ErrorCode ret;
     if ((ret = m_index->SearchIndex(*p_queryResults)) != ErrorCode::Success)
@@ -400,9 +714,12 @@ template <typename T> ErrorCode Index<T>::SearchIndex(QueryResult &p_query, bool
             }
         }
         p_queryResults->Reverse();
-        if ((ret = m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, nullptr)) !=
-            ErrorCode::Success)
+        ret = m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, nullptr);
+        if (ret != ErrorCode::Success)
+        {
+            m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
             return ret;
+        }
         m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
         p_queryResults->SortResult();
     }
@@ -412,7 +729,6 @@ template <typename T> ErrorCode Index<T>::SearchIndex(QueryResult &p_query, bool
         std::copy(p_queryResults->GetResults(), p_queryResults->GetResults() + p_query.GetResultNum(),
                   p_query.GetResults());
         p_query.SetScanned(p_queryResults->GetScanned());
-        delete p_queryResults;
     }
 
     if (p_query.WithMeta() && nullptr != m_pMetadata)
@@ -454,7 +770,8 @@ ErrorCode Index<T>::SearchIndexIterative(QueryResult &p_headQuery, QueryResult &
         bool oldRelaxedMono = p_extraWorkspace->m_relaxedMono;
         ErrorCode ret = SearchDiskIndexIterative(p_headQuery, p_query, p_extraWorkspace);
         bool found = (ret == ErrorCode::Success);
-        if (!found && ret != ErrorCode::VectorNotFound) return ret;
+        if (!found && ret != ErrorCode::VectorNotFound)
+            return ret;
         p_extraWorkspace->m_loadPosting = false;
         if (!found)
         {
@@ -483,7 +800,9 @@ ErrorCode Index<T>::SearchIndexIterative(QueryResult &p_headQuery, QueryResult &
 }
 
 template <typename T>
-std::shared_ptr<ResultIterator> Index<T>::GetIterator(const void *p_target, bool p_searchDeleted, std::function<bool(const ByteArray&)> p_filterFunc, int p_maxCheck) const
+std::shared_ptr<ResultIterator> Index<T>::GetIterator(const void *p_target, bool p_searchDeleted,
+                                                      std::function<bool(const ByteArray &)> p_filterFunc,
+                                                      int p_maxCheck) const
 {
     if (!m_bReady)
         return nullptr;
@@ -571,6 +890,10 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
     workSpace->m_deduper.clear();
     workSpace->m_postingIDs.clear();
 
+    const int firstHeadVID = p_queryResults->GetResult(0)->VID;
+    const float firstHeadDist = p_queryResults->GetResult(0)->Dist;
+    int headResultsConsidered = 0;
+
     float limitDist = p_queryResults->GetResult(0)->Dist * m_options.m_maxDistRatio;
     int i = 0;
     for (; i < m_options.m_searchInternalResultNum; ++i)
@@ -578,6 +901,7 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
         auto res = p_queryResults->GetResult(i);
         if (res->VID == -1 || (limitDist > 0.1 && res->Dist > limitDist))
             break;
+        ++headResultsConsidered;
         if (m_extraSearcher->CheckValidPosting(res->VID))
         {
             workSpace->m_postingIDs.emplace_back(res->VID);
@@ -616,16 +940,36 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
         }
     }
 
+    if (workSpace->m_postingIDs.empty())
+    {
+        static std::atomic<int> s_emptyPostingWarningBudget(0);
+        int warningIndex = s_emptyPostingWarningBudget.fetch_add(1);
+        if (warningIndex < 5)
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Warning,
+                         "SearchDiskIndex collected no valid postings. considered=%d firstHeadVID=%d firstHeadDist=%f "
+                         "limitDist=%f searchInternalResultNum=%d\n",
+                         headResultsConsidered, firstHeadVID, firstHeadDist, limitDist,
+                         m_options.m_searchInternalResultNum);
+        }
+    }
+
     p_queryResults->Reverse();
-    m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, p_stats);
+    ErrorCode ret = m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, p_stats);
     m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
+    if (ret != ErrorCode::Success)
+        return ret;
     p_queryResults->SortResult();
+    if (p_stats != nullptr)
+    {
+        p_stats->m_finalResultHash = ComputeQueryResultHash(*p_queryResults);
+    }
     return ErrorCode::Success;
 }
 
 template <typename T>
 ErrorCode Index<T>::SearchDiskIndexIterative(QueryResult &p_headQuery, QueryResult &p_query,
-                                        ExtraWorkSpace *extraWorkspace) const
+                                             ExtraWorkSpace *extraWorkspace) const
 {
     if (extraWorkspace->m_loadPosting)
     {
@@ -669,7 +1013,10 @@ ErrorCode Index<T>::SearchDiskIndexIterative(QueryResult &p_headQuery, QueryResu
     return ret;
 }
 
-template <typename T> std::unique_ptr<COMMON::WorkSpace> Index<T>::RentWorkSpace(int batch, std::function<bool(const ByteArray&)> p_filterFunc, int p_maxCheck) const
+template <typename T>
+std::unique_ptr<COMMON::WorkSpace> Index<T>::RentWorkSpace(int batch,
+                                                           std::function<bool(const ByteArray &)> p_filterFunc,
+                                                           int p_maxCheck) const
 {
     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "RentWorkSpace NOT SUPPORT FOR SPANN");
     return nullptr;
@@ -729,7 +1076,12 @@ ErrorCode Index<T>::DebugSearchDiskIndex(QueryResult &p_query, int p_subInternal
             workSpace->m_postingIDs.emplace_back(res->VID);
         }
 
-        m_extraSearcher->SearchIndex(workSpace.get(), newResults, m_index, p_stats, truth, found);
+        ErrorCode ret = m_extraSearcher->SearchIndex(workSpace.get(), newResults, m_index, p_stats, truth, found);
+        if (ret != ErrorCode::Success)
+        {
+            m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
+            return ret;
+        }
     }
     m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
     newResults.SortResult();
@@ -1090,7 +1442,7 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
     if (m_options.m_selectHead)
     {
         bool success = false;
-        if (m_pQuantizer)
+        if (m_pQuantizer && !UsesExperimentalPostingFormat(m_options))
         {
             success = SelectHeadInternal<std::uint8_t>(p_reader);
         }
@@ -1111,12 +1463,13 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Begin Build Head...\n");
     if (m_options.m_buildHead)
     {
-        auto valueType = m_pQuantizer ? SPTAG::VectorValueType::UInt8 : m_options.m_valueType;
-        auto dims = m_pQuantizer ? m_pQuantizer->GetNumSubvectors() : m_options.m_dim;
+        bool useQuantizedHead = m_pQuantizer && !UsesExperimentalPostingFormat(m_options);
+        auto valueType = useQuantizedHead ? SPTAG::VectorValueType::UInt8 : m_options.m_valueType;
+        auto dims = useQuantizedHead ? m_pQuantizer->GetNumSubvectors() : m_options.m_dim;
 
         m_index = SPTAG::VectorIndex::CreateInstance(m_options.m_indexAlgoType, valueType);
         m_index->SetParameter("DistCalcMethod", SPTAG::Helper::Convert::ConvertToString(m_options.m_distCalcMethod));
-        m_index->SetQuantizer(m_pQuantizer);
+        m_index->SetQuantizer(useQuantizedHead ? m_pQuantizer : nullptr);
         for (const auto &iter : m_headParameters)
         {
             m_index->SetParameter(iter.first.c_str(), iter.second.c_str());
@@ -1138,7 +1491,7 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to build head index.\n");
                 return ErrorCode::Fail;
             }
-            if (!m_options.m_quantizerFilePath.empty())
+            if (useQuantizedHead && !m_options.m_quantizerFilePath.empty())
                 m_index->SetQuantizerFileName(
                     m_options.m_quantizerFilePath.substr(m_options.m_quantizerFilePath.find_last_of("/\\") + 1));
             if (m_index->SaveIndex(m_options.m_indexDirectory + FolderSep + m_options.m_headIndexFolder) !=
@@ -1174,7 +1527,10 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
                          (m_options.m_indexDirectory + FolderSep + m_options.m_headIndexFolder).c_str());
             return ErrorCode::Fail;
         }
-        m_index->SetQuantizer(m_pQuantizer);
+        if (!(UsesExperimentalPostingFormat(m_options) && m_pQuantizer))
+        {
+            m_index->SetQuantizer(m_pQuantizer);
+        }
         if (!CheckHeadIndexType())
             return ErrorCode::Fail;
 
@@ -1186,7 +1542,7 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
 
         if (m_options.m_storage == Storage::STATIC)
         {
-            if (m_pQuantizer)
+            if (m_pQuantizer && !UsesExperimentalPostingFormat(m_options))
                 m_extraSearcher.reset(new ExtraStaticSearcher<std::uint8_t>());
             else
                 m_extraSearcher.reset(new ExtraStaticSearcher<T>());
@@ -1199,7 +1555,7 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
                 m_extraSearcher.reset(new ExtraDynamicSearcher<T>(m_options));
         }
 
-       {
+        {
             std::shared_ptr<Helper::DiskIO> ptr = SPTAG::f_createIO();
             if (ptr == nullptr ||
                 !ptr->Initialize((m_options.m_indexDirectory + FolderSep + m_options.m_headIDFile).c_str(),
@@ -1228,7 +1584,8 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
             if (!m_options.m_excludehead)
             {
                 std::uint64_t vid = (std::uint64_t)MaxSize;
-                for (int i = 0; i < m_vectorTranslateMap.R(); i++) {
+                for (int i = 0; i < m_vectorTranslateMap.R(); i++)
+                {
                     *(m_vectorTranslateMap[i]) = vid;
                 }
                 m_vectorTranslateMap.Save(m_options.m_indexDirectory + FolderSep + m_options.m_headIDFile);
@@ -1278,8 +1635,9 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
 }
 template <typename T> ErrorCode Index<T>::BuildIndex(bool p_normalized)
 {
-    SPTAG::VectorValueType valueType = m_pQuantizer ? SPTAG::VectorValueType::UInt8 : m_options.m_valueType;
-    SizeType dim = m_pQuantizer ? m_pQuantizer->GetNumSubvectors() : m_options.m_dim;
+    bool useQuantizedHead = m_pQuantizer && !UsesExperimentalPostingFormat(m_options);
+    SPTAG::VectorValueType valueType = useQuantizedHead ? SPTAG::VectorValueType::UInt8 : m_options.m_valueType;
+    SizeType dim = useQuantizedHead ? m_pQuantizer->GetNumSubvectors() : m_options.m_dim;
     std::shared_ptr<Helper::ReaderOptions> vectorOptions(
         new Helper::ReaderOptions(valueType, dim, m_options.m_vectorType, m_options.m_vectorDelimiter,
                                   m_options.m_iSSDNumberOfThreads, p_normalized));
@@ -1370,9 +1728,10 @@ ErrorCode Index<T>::RefineIndex(const std::vector<std::shared_ptr<Helper::DiskIO
     std::vector<SizeType> OldtoNew;
     std::vector<SizeType> NewtoOld;
     SizeType newR = m_versionMap.Count();
-    if (p_mapping == nullptr) p_mapping = &OldtoNew;
+    if (p_mapping == nullptr)
+        p_mapping = &OldtoNew;
     p_mapping->resize(newR);
-    
+
     for (SizeType i = 0; i < newR; i++)
     {
         if (!m_versionMap.Deleted(i))
@@ -1406,12 +1765,19 @@ ErrorCode Index<T>::RefineIndex(const std::vector<std::shared_ptr<Helper::DiskIO
             }
             else if (oldID >= p_mapping->size())
             {
-                SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "SPANNIndex::RefineIndex: Vector %d with old ID %llu cannot be mapped! p_mapping size: %llu.\n", i, oldID, p_mapping->size());
+                SPTAGLIB_LOG(
+                    Helper::LogLevel::LL_Error,
+                    "SPANNIndex::RefineIndex: Vector %d with old ID %llu cannot be mapped! p_mapping size: %llu.\n", i,
+                    oldID, p_mapping->size());
             }
-            else {
+            else
+            {
                 if (m_versionMap.Deleted(oldID))
                 {
-                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "SPANNIndex::RefineIndex: Vector %d with old ID %llu is deleted in disk index, but still in head index!\n", i, oldID);
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                                 "SPANNIndex::RefineIndex: Vector %d with old ID %llu is deleted in disk index, but "
+                                 "still in head index!\n",
+                                 i, oldID);
                 }
                 *(new_vectorTranslateMap[headOldtoNew[i]]) = (*p_mapping)[oldID];
             }
@@ -1591,16 +1957,15 @@ ErrorCode Index<T>::AddIndex(const void *p_data, SizeType p_vectorNum, Dimension
     return m_extraSearcher->AddIndex(workSpace.get(), vectorSet, m_index, begin);
 }
 
-template <typename T>
-ErrorCode Index<T>::Check()
+template <typename T> ErrorCode Index<T>::Check()
 {
     std::atomic<ErrorCode> ret = ErrorCode::Success;
     while (!AllFinished())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    //if ((ret = m_index->Check()) != ErrorCode::Success)
-    //    return ret;
+    // if ((ret = m_index->Check()) != ErrorCode::Success)
+    //     return ret;
 
     std::vector<std::thread> mythreads;
     mythreads.reserve(m_options.m_iSSDNumberOfThreads);
@@ -1683,8 +2048,9 @@ template <typename T> ErrorCode Index<T>::DeleteIndex(const void *p_vectors, Siz
     }
     else
     {
-        vectorSet.reset(new BasicVectorSet(ByteArray((std::uint8_t *)p_vectors, sizeof(T) * p_vectorNum * p_dimension, false),
-                                           GetEnumValueType<T>(), p_dimension, p_vectorNum));
+        vectorSet.reset(
+            new BasicVectorSet(ByteArray((std::uint8_t *)p_vectors, sizeof(T) * p_vectorNum * p_dimension, false),
+                               GetEnumValueType<T>(), p_dimension, p_vectorNum));
     }
 
     auto workSpace = m_workSpaceFactory->GetWorkSpace();

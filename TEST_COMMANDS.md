@@ -1069,6 +1069,54 @@ for st in 2 4 8 16; do
 done
 ```
 
+### 并发稳定性追踪
+
+当目标不是压 QPS，而是确认 `SearchThreadNum=1/2/4/8` 是否在 coarse candidate、payload page plan 或 final result 阶段开始分叉时，优先使用专门的 trace 配置与脚本，而不是手工改 `sed`。
+
+Phase 1 two-stage:
+
+```bash
+cd /home/ray/code/SPTAG
+
+bash scripts/run_spann_concurrency_trace.sh \
+  -c configs/spann_phase1_twostage_concurrency_trace.ini \
+  -o results/concurrency_trace/phase1 \
+  -p /home/ray/data/sift1m \
+  -t 1,2,4,8 \
+  -q 200
+```
+
+Phase 2 chunked two-stage:
+
+```bash
+cd /home/ray/code/SPTAG
+
+bash scripts/run_spann_concurrency_trace.sh \
+  -c configs/spann_phase2_chunked_concurrency_trace.ini \
+  -o results/concurrency_trace/phase2 \
+  -p /home/ray/data/sift1m \
+  -t 1,2,4,8 \
+  -q 200
+```
+
+运行结束后重点查看：
+
+- `results/concurrency_trace/.../st*/query_io_stats.csv`
+- `results/concurrency_trace/.../hash_compare.txt`
+
+`query_io_stats.csv` 已包含以下 query 级稳定性字段：
+
+- `coarse_candidate_hash`
+- `payload_page_hash`
+- `final_result_hash`
+- `recall`
+
+判读原则：
+
+- 如果 `coarse_candidate_hash` 已分叉，问题优先看 coarse candidate 生成或 workspace 状态污染。
+- 如果 coarse 一致但 `payload_page_hash` 分叉，问题优先看 payload read plan / page mapping。
+- 如果 coarse、payload 都一致但 `final_result_hash` 分叉，问题优先看 rerank 或结果集合并/排序。
+
 ---
 
 ## 9.7 I/O 读取模式切换与测试

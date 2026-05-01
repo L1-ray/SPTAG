@@ -722,7 +722,7 @@ namespace SPTAG
                     myiocb->aio_lio_opcode = IOCB_CMD_PREAD;
                     myiocb->aio_fildes = m_fileHandle;
                     myiocb->aio_buf = (std::uint64_t)(readRequest->m_buffer);
-                    myiocb->aio_nbytes = PageSize;
+                    myiocb->aio_nbytes = readRequest->m_readSize;
                     myiocb->aio_offset = static_cast<std::int64_t>(readRequest->m_offset);
 #endif
                     if (readRequest->m_readSize > 0) realCount++;
@@ -744,7 +744,8 @@ namespace SPTAG
                                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "AsyncFileReader::ReadBlocks: io_uring_get_sqe failed\n");
                                 return 0;
                             }
-                            io_uring_prep_read(sqe, m_fileHandle, readRequests[reqidx].m_buffer, PageSize,
+                            io_uring_prep_read(sqe, m_fileHandle, readRequests[reqidx].m_buffer,
+                                               readRequests[reqidx].m_readSize,
                                                readRequests[reqidx].m_offset);
                             io_uring_sqe_set_data(sqe, &(readRequests[reqidx]));
 #else
