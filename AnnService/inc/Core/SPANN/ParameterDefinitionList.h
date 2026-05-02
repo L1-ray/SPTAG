@@ -133,6 +133,9 @@ DefineSSDParameter(m_iotimeout, int, 30, "IOTimeout") // Mutable
 DefineSSDParameter(m_enableDetailedIOStats, bool, false, "EnableDetailedIOStats")
 DefineSSDParameter(m_detailedIOStatsOutput, std::string, std::string(""), "DetailedIOStatsOutput")
 DefineSSDParameter(m_detailedIOStatsSampleRate, double, 1.0, "DetailedIOStatsSampleRate")
+DefineSSDParameter(m_enablePayloadTrace, bool, false, "EnablePayloadTrace")
+DefineSSDParameter(m_payloadTraceOutput, std::string, std::string(""), "PayloadTraceOutput")
+DefineSSDParameter(m_payloadTraceSampleRate, double, 1.0, "PayloadTraceSampleRate")
 DefineSSDParameter(m_ssdPostingFormatVersion, int, 0, "SSDPostingFormatVersion")
 DefineSSDParameter(m_enableTwoStagePosting, bool, false, "EnableTwoStagePosting")
 DefineSSDParameter(m_enableChunkedPosting, bool, false, "EnableChunkedPosting")
@@ -142,6 +145,9 @@ DefineSSDParameter(m_postingTopRGlobal, int, 256, "PostingTopRGlobal")
 DefineSSDParameter(m_postingChunkTargetSize, int, 0, "PostingChunkTargetSize")
 DefineSSDParameter(m_postingChunkPruneMode, std::string, std::string("None"), "PostingChunkPruneMode")
 DefineSSDParameter(m_postingPayloadBatchPages, int, 4, "PostingPayloadBatchPages")
+DefineSSDParameter(m_enablePayloadReorderByCode, bool, false, "EnablePayloadReorderByCode")
+DefineSSDParameter(m_postingPayloadLayout, std::string, std::string("FullVector"), "PostingPayloadLayout")
+DefineSSDParameter(m_postingCohitOrderFile, std::string, std::string(""), "PostingCohitOrderFile")
 
 // Calculating
 // TruthFilePrefix

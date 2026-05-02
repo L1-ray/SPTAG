@@ -1,0 +1,57 @@
+{
+  "approx_single_thread_qps": 803.7796290251575,
+  "avg_batch_read_total_ms": 0.9872939208,
+  "avg_candidates_per_unique_payload_page": -1.0,
+  "avg_duplicate_page_like_ratio": -1.0,
+  "avg_duplicate_vector_count": 1130.1906,
+  "avg_ex_latency_ms": 1.0088953,
+  "avg_io_wait_ms": 0.0,
+  "avg_pages_read": 236.4339,
+  "avg_payload_candidates": 0.0,
+  "avg_payload_physical_bytes": 0.0,
+  "avg_payload_read_wait_ms": 0.0,
+  "avg_postings_touched": 127.2848,
+  "avg_recall": 0.9934,
+  "avg_requested_read_bytes": 968433.2544,
+  "avg_total_latency_ms": 1.2441221,
+  "avg_unique_payload_pages": 0.0,
+  "gini_pages_per_query": 0.07767324596853498,
+  "gini_payload_bytes_per_query": -1.0,
+  "gini_payload_wait_per_query": -1.0,
+  "input_query_csv": "/home/ray/code/SPTAG/results/io_analysis/sift1m_official_u8default_20260430/sweeps_20260430_strict_v2/st2_nt40_ir128_pl4/query_io_stats.csv",
+  "io_wait_over_ex": 0.0,
+  "p50_total_latency_ms": 1.267,
+  "p95_ex_latency_ms": 1.238,
+  "p95_payload_read_wait_ms": -1.0,
+  "p95_total_latency_ms": 1.4800499999999992,
+  "p99_total_latency_ms": 1.557,
+  "payload_read_wait_over_ex": -1.0,
+  "payload_stats_supported": false,
+  "payload_wait_supported": false,
+  "query_count": 10000,
+  "recommendation": {
+    "ranking": [
+      {
+        "direction": "M4",
+        "score": 1
+      },
+      {
+        "direction": "M1",
+        "score": 0
+      },
+      {
+        "direction": "M2-H",
+        "score": 0
+      }
+    ],
+    "reasons": [
+      "payload-locality columns are unavailable/zero in this run; provide payload trace or richer instrumentation",
+      "payload read wait columns are unavailable/zero; M1 scoring is conservative"
+    ],
+    "top_direction": "M4"
+  },
+  "top10_query_share_pages": 0.11950528244892124,
+  "top10_query_share_payload_bytes": 0.0,
+  "top10_query_share_payload_wait": -1.0,
+  "top1_query_share_payload_wait": -1.0
+}

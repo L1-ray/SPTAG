@@ -125,7 +125,8 @@ inline double SafeRatio(uint64_t numerator, uint64_t denominator)
 
 template <typename ValueType>
 void SearchSequential(SPANN::Index<ValueType> *p_index, int p_numThreads, std::vector<QueryResult> &p_results,
-                      std::vector<SPANN::SearchStats> &p_stats, int p_maxQueryCount, int p_internalResultNum)
+                      std::vector<SPANN::SearchStats> &p_stats, int p_maxQueryCount, int p_internalResultNum,
+                      std::vector<std::set<int>> *p_truth = nullptr)
 {
     int numQueries = min(static_cast<int>(p_results.size()), p_maxQueryCount);
 
@@ -166,7 +167,9 @@ void SearchSequential(SPANN::Index<ValueType> *p_index, int p_numThreads, std::v
                     double startTime = threadws.getElapsedMs();
                     p_index->GetMemoryIndex()->SearchIndex(p_results[index]);
                     double endTime = threadws.getElapsedMs();
-                    p_index->SearchDiskIndex(p_results[index], &(p_stats[index]));
+                    std::set<int> *truthPtr =
+                        (p_truth != nullptr && index < p_truth->size()) ? &((*p_truth)[index]) : nullptr;
+                    p_index->SearchDiskIndex(p_results[index], &(p_stats[index]), truthPtr);
                     double exEndTime = threadws.getElapsedMs();
                     auto queryEndTp = std::chrono::steady_clock::now();
                     p_stats[index].m_queryEndNs = static_cast<uint64_t>(
@@ -275,7 +278,27 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
 
     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start ANN Search...\n");
 
-    SearchSequential(p_index, numThreads, results, stats, p_opts.m_queryCountLimit, internalResultNum);
+    // Load truth before search for miss-case attribution (P2)
+    std::vector<std::set<SizeType>> truth;
+    if (!truthFile.empty())
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Pre-loading TruthFile for miss-case attribution...\n");
+        auto ptr = f_createIO();
+        if (ptr == nullptr || !ptr->Initialize(truthFile.c_str(), std::ios::in | std::ios::binary))
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed open truth file: %s\n", truthFile.c_str());
+            return ErrorCode::FailedOpenFile;
+        }
+        int originalK = truthK;
+        COMMON::TruthSet::LoadTruth(ptr, truth, numQueries, originalK, truthK, p_opts.m_truthType);
+        char tmp[4];
+        if (ptr->ReadBinary(4, tmp) == 4)
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Truth number is larger than query number(%d)!\n", numQueries);
+        }
+    }
+
+    SearchSequential(p_index, numThreads, results, stats, p_opts.m_queryCountLimit, internalResultNum, &truth);
 
     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFinish ANN Search...\n");
 
@@ -333,26 +356,9 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
     }
 
     float recall = 0, MRR = 0;
-    std::vector<std::set<SizeType>> truth;
     std::vector<double> perQueryRecall(max(0, effectiveQueries), -1.0);
-    if (!truthFile.empty())
+    if (!truth.empty())
     {
-        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start loading TruthFile...\n");
-
-        auto ptr = f_createIO();
-        if (ptr == nullptr || !ptr->Initialize(truthFile.c_str(), std::ios::in | std::ios::binary))
-        {
-            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed open truth file: %s\n", truthFile.c_str());
-            return ErrorCode::FailedOpenFile;
-        }
-        int originalK = truthK;
-        COMMON::TruthSet::LoadTruth(ptr, truth, numQueries, originalK, truthK, p_opts.m_truthType);
-        char tmp[4];
-        if (ptr->ReadBinary(4, tmp) == 4)
-        {
-            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Truth number is larger than query number(%d)!\n", numQueries);
-        }
-
         recall =
             COMMON::TruthSet::CalculateRecall<ValueType>((p_index->GetMemoryIndex()).get(), results, truth, K, truthK,
                                                          querySet, vectorSet, numQueries, nullptr, false, &MRR);
@@ -373,6 +379,59 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
                 }
                 perQueryRecall[i] = static_cast<double>(hit) / static_cast<double>(truthK);
             }
+        }
+    }
+
+    if (p_opts.m_enablePayloadTrace && !p_opts.m_payloadTraceOutput.empty())
+    {
+        std::ofstream traceOut(p_opts.m_payloadTraceOutput.c_str(), std::ios::out | std::ios::trunc);
+        if (!traceOut.is_open())
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open payload trace CSV: %s\n",
+                         p_opts.m_payloadTraceOutput.c_str());
+        }
+        else
+        {
+            double sampleRate = p_opts.m_payloadTraceSampleRate;
+            if (sampleRate < 0.0)
+                sampleRate = 0.0;
+            if (sampleRate > 1.0)
+                sampleRate = 1.0;
+
+            std::mt19937_64 rng(20260502ULL);
+            std::uniform_real_distribution<double> sampleDist(0.0, 1.0);
+
+            traceOut << "query_id,trace_index,posting_id,chunk_id,vector_id,payload_page_id,payload_page_count,"
+                        "payload_physical_offset,payload_bytes,coarse_dist\n";
+            traceOut << std::fixed << std::setprecision(6);
+
+            uint64_t rowsWritten = 0;
+            for (int i = 0; i < effectiveQueries; ++i)
+            {
+                if (sampleRate < 1.0 && sampleDist(rng) > sampleRate)
+                    continue;
+
+                const auto &records = stats[i].m_payloadTraceRecords;
+                for (size_t traceIndex = 0; traceIndex < records.size(); ++traceIndex)
+                {
+                    const auto &record = records[traceIndex];
+                    traceOut << i << "," << traceIndex << "," << record.m_postingID << "," << record.m_chunkID << ","
+                             << record.m_vectorID << "," << record.m_payloadPageID << "," << record.m_payloadPageCount
+                             << "," << record.m_payloadPhysicalOffset << "," << record.m_payloadBytes << ","
+                             << record.m_coarseDist << "\n";
+                    ++rowsWritten;
+                }
+            }
+
+            traceOut.close();
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Payload trace CSV saved to %s, rows=%llu\n",
+                         p_opts.m_payloadTraceOutput.c_str(), static_cast<unsigned long long>(rowsWritten));
+        }
+
+        for (int i = 0; i < effectiveQueries; ++i)
+        {
+            stats[i].m_payloadTraceRecords.clear();
+            stats[i].m_payloadTraceRecords.shrink_to_fit();
         }
     }
 
@@ -525,6 +584,101 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
         statsForPrint,
         [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_rerankCandidateCount); }, "%.3lf");
 
+    // Payload locality metrics
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nUnique Payload Pages Per Query:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_uniquePayloadPages); }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPayload Candidates Per Query:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_payloadCandidates); }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nCandidates Per Payload Page:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double {
+            return SafeRatio(ss.m_payloadCandidates, ss.m_uniquePayloadPages);
+        },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPostings With Payload Per Query:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_postingsWithPayload); }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTotal Payload Page Spans Per Query:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_totalPayloadPageSpans); },
+        "%.3lf");
+
+    // P2: Coarse recall / miss-case attribution statistics
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\n--- P2: Miss-Case Attribution ---\n");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Count Per Query:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthCount); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nCoarse Recall (truth in coarse candidates):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_coarseRecall); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nCoarse Recall After Dedupe:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_coarseRecallAfterDedupe); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nRerank Recall (truth in rerank candidates):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_rerankRecall); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFinal Recall (truth in final results):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_finalRecall); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Recovered By Head Result:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthRecoveredByHeadResult); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Dropped By Per-Posting TopR:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthDroppedByPerPostingTopR); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Dropped By Global TopR:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthDroppedByGlobalTopR); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Dropped By Rerank TopK:\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthDroppedByRerankTopK); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Missing (Not Observed In Scanned Posting/Chunk):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthMissingPostingNotVisited); },
+        "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nTruth Missing (Not In Any Posting, Reserved):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint,
+        [](const SPANN::SearchStats &ss) -> double { return static_cast<double>(ss.m_truthMissingNotInPosting); },
+        "%.3lf");
+
     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nI/O Issue Latency (ms):\n");
     PrintPercentiles<double, SPANN::SearchStats>(
         statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_ioIssueLatencyMs; }, "%.3lf");
@@ -548,6 +702,46 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nDistance Calc Latency (ms):\n");
     PrintPercentiles<double, SPANN::SearchStats>(
         statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_distanceCalcLatencyMs; }, "%.3lf");
+
+    // P1: Per-phase timing metrics for two-stage pipeline
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\n--- P1: Two-Stage Per-Phase Timing (ms) ---\n");
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nRead Header & Directory Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_readHeaderDirMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nScan Compact Codes Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_scanCompactCodesMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nMerge Coarse Candidates Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_mergeCoarseCandidatesMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nBuild Payload Read Plan Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_buildPayloadReadPlanMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFetch Payload & Rerank Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_fetchPayloadAndRerankMs; }, "%.3lf");
+
+    // P2: Fetch Payload & Rerank sub-phase timing
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\n--- P2: Fetch Payload & Rerank Sub-Phase Timing (ms) ---\n");
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPayload Read Wait Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_payloadReadWaitMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nPayload Copy Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_payloadCopyMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nExact Distance Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_exactDistanceMs; }, "%.3lf");
+
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nResult Insertion Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_resultInsertionMs; }, "%.3lf");
 
     if (p_opts.m_enableDetailedIOStats && !p_opts.m_detailedIOStatsOutput.empty())
     {
@@ -582,7 +776,15 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
                    "elements_raw,metadata_read_bytes,code_logical_bytes,code_physical_bytes,payload_logical_bytes,"
                    "payload_physical_bytes,distance_evaluated_count,duplicate_vector_count,coarse_candidate_count_"
                    "before_dedupe,coarse_candidate_count_after_dedupe,rerank_candidate_count,final_result_count,"
-                   "coarse_candidate_hash,payload_page_hash,final_result_hash,recall\n";
+                   "coarse_candidate_hash,payload_page_hash,final_result_hash,recall,"
+                   "unique_payload_pages,payload_candidates,postings_with_payload,total_payload_page_spans,"
+                   "truth_count,coarse_recall,coarse_recall_after_dedupe,rerank_recall,final_recall,"
+                   "truth_recovered_by_head_result,truth_dropped_per_posting_topr,truth_dropped_global_topr,"
+                   "truth_dropped_rerank_topk,truth_missing_not_observed_in_scanned_posting,"
+                   "truth_missing_not_in_posting_reserved,"
+                   "read_header_dir_ms,scan_compact_codes_ms,merge_coarse_candidates_ms,build_payload_read_plan_ms,"
+                   "fetch_payload_and_rerank_ms,"
+                   "payload_read_wait_ms,payload_copy_ms,exact_distance_ms,result_insertion_ms\n";
             csvOut << std::fixed << std::setprecision(6);
 
             for (int i = 0; i < effectiveQueries; ++i)
@@ -604,12 +806,22 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
                        << stats[i].m_metadataBytesRead << "," << stats[i].m_codeBytesRead << ","
                        << stats[i].m_codePhysicalBytesRead << "," << stats[i].m_payloadLogicalBytesRead << ","
                        << stats[i].m_payloadBytesRead << "," << stats[i].m_distanceEvaluatedCount << ","
-                       << stats[i].m_duplicateVectorCount << ","
-                       << stats[i].m_coarseCandidateCount << "," << stats[i].m_coarseCandidateCountAfterDedupe << ","
-                       << stats[i].m_rerankCandidateCount << "," << stats[i].m_finalResultCount << ","
-                       << stats[i].m_coarseCandidateHash << "," << stats[i].m_payloadPageHash << ","
-                       << stats[i].m_finalResultHash << "," << queryRecall
-                       << "\n";
+                       << stats[i].m_duplicateVectorCount << "," << stats[i].m_coarseCandidateCount << ","
+                       << stats[i].m_coarseCandidateCountAfterDedupe << "," << stats[i].m_rerankCandidateCount << ","
+                       << stats[i].m_finalResultCount << "," << stats[i].m_coarseCandidateHash << ","
+                       << stats[i].m_payloadPageHash << "," << stats[i].m_finalResultHash << "," << queryRecall << ","
+                       << stats[i].m_uniquePayloadPages << "," << stats[i].m_payloadCandidates << ","
+                       << stats[i].m_postingsWithPayload << "," << stats[i].m_totalPayloadPageSpans << ","
+                       << stats[i].m_truthCount << "," << stats[i].m_coarseRecall << ","
+                       << stats[i].m_coarseRecallAfterDedupe << "," << stats[i].m_rerankRecall << ","
+                       << stats[i].m_finalRecall << "," << stats[i].m_truthRecoveredByHeadResult << ","
+                       << stats[i].m_truthDroppedByPerPostingTopR << "," << stats[i].m_truthDroppedByGlobalTopR << ","
+                       << stats[i].m_truthDroppedByRerankTopK << "," << stats[i].m_truthMissingPostingNotVisited << ","
+                       << stats[i].m_truthMissingNotInPosting << "," << stats[i].m_readHeaderDirMs << ","
+                       << stats[i].m_scanCompactCodesMs << "," << stats[i].m_mergeCoarseCandidatesMs << ","
+                       << stats[i].m_buildPayloadReadPlanMs << "," << stats[i].m_fetchPayloadAndRerankMs << ","
+                       << stats[i].m_payloadReadWaitMs << "," << stats[i].m_payloadCopyMs << ","
+                       << stats[i].m_exactDistanceMs << "," << stats[i].m_resultInsertionMs << "\n";
             }
 
             csvOut.close();

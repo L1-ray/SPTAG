@@ -1,0 +1,2 @@
+run_name	search_thread_num	posting_topr_per_posting	posting_topr_global	config	query_csv	run_dir
+st1_pp32_pg128	1	32	128	/home/ray/code/SPTAG/results/io_analysis/p2_topr_sweep_20260502_topk_v1/st1_pp32_pg128/config.ini	/home/ray/code/SPTAG/results/io_analysis/p2_topr_sweep_20260502_topk_v1/st1_pp32_pg128/query_io_stats.csv	/home/ray/code/SPTAG/results/io_analysis/p2_topr_sweep_20260502_topk_v1/st1_pp32_pg128

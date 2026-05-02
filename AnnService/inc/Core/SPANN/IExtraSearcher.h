@@ -16,12 +16,25 @@
 #include <cstdint>
 #include <memory>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace SPTAG
 {
 namespace SPANN
 {
+
+struct PayloadTraceRecord
+{
+    int m_postingID = -1;
+    int m_chunkID = 0;
+    SizeType m_vectorID = -1;
+    uint32_t m_payloadPageID = 0;
+    uint32_t m_payloadPageCount = 0;
+    uint64_t m_payloadPhysicalOffset = 0;
+    uint32_t m_payloadBytes = 0;
+    float m_coarseDist = MaxDist;
+};
 
 struct SearchStats
 {
@@ -62,6 +75,17 @@ struct SearchStats
         m_postingDecodeLatencyMs = 0;
         m_postingParseLatencyMs = 0;
         m_distanceCalcLatencyMs = 0;
+        // P1: Per-phase timing metrics
+        m_readHeaderDirMs = 0;
+        m_scanCompactCodesMs = 0;
+        m_mergeCoarseCandidatesMs = 0;
+        m_buildPayloadReadPlanMs = 0;
+        m_fetchPayloadAndRerankMs = 0;
+        // P2: FetchPayloadPagesAndRerank sub-phase timing
+        m_payloadReadWaitMs = 0;
+        m_payloadCopyMs = 0;
+        m_exactDistanceMs = 0;
+        m_resultInsertionMs = 0;
         m_queryStartNs = 0;
         m_queryEndNs = 0;
         m_metadataBytesRead = 0;
@@ -77,8 +101,27 @@ struct SearchStats
         m_coarseCandidateHash = 0;
         m_payloadPageHash = 0;
         m_finalResultHash = 0;
+        // Payload locality metrics
+        m_uniquePayloadPages = 0;
+        m_payloadCandidates = 0;
+        m_postingsWithPayload = 0;
+        m_totalPayloadPageSpans = 0;
+        // P2: Coarse recall / miss-case attribution metrics
+        m_truthCount = 0;
+        m_coarseRecall = 0;
+        m_coarseRecallAfterDedupe = 0;
+        m_rerankRecall = 0;
+        m_finalRecall = 0;
+        m_truthRecoveredByHeadResult = 0;
+        m_truthDroppedByPerPostingTopR = 0;
+        m_truthDroppedByGlobalTopR = 0;
+        m_truthDroppedByRerankTopK = 0;
+        m_truthMissingPostingNotVisited = 0;
+        m_truthMissingNotInPosting = 0;
+        m_resultLimit = 0;
         m_threadID = 0;
         m_searchRequestTime = std::chrono::steady_clock::time_point();
+        m_payloadTraceRecords.clear();
     }
 
     void Add(const SearchStats &other)
@@ -113,6 +156,17 @@ struct SearchStats
         m_postingDecodeLatencyMs += other.m_postingDecodeLatencyMs;
         m_postingParseLatencyMs += other.m_postingParseLatencyMs;
         m_distanceCalcLatencyMs += other.m_distanceCalcLatencyMs;
+        // P1: Per-phase timing metrics
+        m_readHeaderDirMs += other.m_readHeaderDirMs;
+        m_scanCompactCodesMs += other.m_scanCompactCodesMs;
+        m_mergeCoarseCandidatesMs += other.m_mergeCoarseCandidatesMs;
+        m_buildPayloadReadPlanMs += other.m_buildPayloadReadPlanMs;
+        m_fetchPayloadAndRerankMs += other.m_fetchPayloadAndRerankMs;
+        // P2: FetchPayloadPagesAndRerank sub-phase timing
+        m_payloadReadWaitMs += other.m_payloadReadWaitMs;
+        m_payloadCopyMs += other.m_payloadCopyMs;
+        m_exactDistanceMs += other.m_exactDistanceMs;
+        m_resultInsertionMs += other.m_resultInsertionMs;
         m_metadataBytesRead += other.m_metadataBytesRead;
         m_codePhysicalBytesRead += other.m_codePhysicalBytesRead;
         m_codeBytesRead += other.m_codeBytesRead;
@@ -123,6 +177,22 @@ struct SearchStats
         m_chunksScanned += other.m_chunksScanned;
         m_coarseCandidateCount += other.m_coarseCandidateCount;
         m_coarseCandidateCountAfterDedupe += other.m_coarseCandidateCountAfterDedupe;
+        m_uniquePayloadPages += other.m_uniquePayloadPages;
+        m_payloadCandidates += other.m_payloadCandidates;
+        m_postingsWithPayload += other.m_postingsWithPayload;
+        m_totalPayloadPageSpans += other.m_totalPayloadPageSpans;
+        // P2: Coarse recall / miss-case attribution metrics
+        m_truthCount += other.m_truthCount;
+        m_coarseRecall += other.m_coarseRecall;
+        m_coarseRecallAfterDedupe += other.m_coarseRecallAfterDedupe;
+        m_rerankRecall += other.m_rerankRecall;
+        m_finalRecall += other.m_finalRecall;
+        m_truthRecoveredByHeadResult += other.m_truthRecoveredByHeadResult;
+        m_truthDroppedByPerPostingTopR += other.m_truthDroppedByPerPostingTopR;
+        m_truthDroppedByGlobalTopR += other.m_truthDroppedByGlobalTopR;
+        m_truthDroppedByRerankTopK += other.m_truthDroppedByRerankTopK;
+        m_truthMissingPostingNotVisited += other.m_truthMissingPostingNotVisited;
+        m_truthMissingNotInPosting += other.m_truthMissingNotInPosting;
     }
 
     void Divide(double divisor)
@@ -160,6 +230,17 @@ struct SearchStats
         m_postingDecodeLatencyMs /= divisor;
         m_postingParseLatencyMs /= divisor;
         m_distanceCalcLatencyMs /= divisor;
+        // P1: Per-phase timing metrics
+        m_readHeaderDirMs /= divisor;
+        m_scanCompactCodesMs /= divisor;
+        m_mergeCoarseCandidatesMs /= divisor;
+        m_buildPayloadReadPlanMs /= divisor;
+        m_fetchPayloadAndRerankMs /= divisor;
+        // P2: FetchPayloadPagesAndRerank sub-phase timing
+        m_payloadReadWaitMs /= divisor;
+        m_payloadCopyMs /= divisor;
+        m_exactDistanceMs /= divisor;
+        m_resultInsertionMs /= divisor;
         m_metadataBytesRead = static_cast<uint64_t>(m_metadataBytesRead / divisor);
         m_codePhysicalBytesRead = static_cast<uint64_t>(m_codePhysicalBytesRead / divisor);
         m_codeBytesRead = static_cast<uint64_t>(m_codeBytesRead / divisor);
@@ -170,6 +251,22 @@ struct SearchStats
         m_chunksScanned = static_cast<uint64_t>(m_chunksScanned / divisor);
         m_coarseCandidateCount = static_cast<uint64_t>(m_coarseCandidateCount / divisor);
         m_coarseCandidateCountAfterDedupe = static_cast<uint64_t>(m_coarseCandidateCountAfterDedupe / divisor);
+        m_uniquePayloadPages = static_cast<uint64_t>(m_uniquePayloadPages / divisor);
+        m_payloadCandidates = static_cast<uint64_t>(m_payloadCandidates / divisor);
+        m_postingsWithPayload = static_cast<uint64_t>(m_postingsWithPayload / divisor);
+        m_totalPayloadPageSpans = static_cast<uint64_t>(m_totalPayloadPageSpans / divisor);
+        // P2: Coarse recall / miss-case attribution metrics
+        m_truthCount = static_cast<uint64_t>(m_truthCount / divisor);
+        m_coarseRecall = static_cast<uint64_t>(m_coarseRecall / divisor);
+        m_coarseRecallAfterDedupe = static_cast<uint64_t>(m_coarseRecallAfterDedupe / divisor);
+        m_rerankRecall = static_cast<uint64_t>(m_rerankRecall / divisor);
+        m_finalRecall = static_cast<uint64_t>(m_finalRecall / divisor);
+        m_truthRecoveredByHeadResult = static_cast<uint64_t>(m_truthRecoveredByHeadResult / divisor);
+        m_truthDroppedByPerPostingTopR = static_cast<uint64_t>(m_truthDroppedByPerPostingTopR / divisor);
+        m_truthDroppedByGlobalTopR = static_cast<uint64_t>(m_truthDroppedByGlobalTopR / divisor);
+        m_truthDroppedByRerankTopK = static_cast<uint64_t>(m_truthDroppedByRerankTopK / divisor);
+        m_truthMissingPostingNotVisited = static_cast<uint64_t>(m_truthMissingPostingNotVisited / divisor);
+        m_truthMissingNotInPosting = static_cast<uint64_t>(m_truthMissingNotInPosting / divisor);
     }
 
     int m_check;
@@ -222,6 +319,19 @@ struct SearchStats
     double m_postingParseLatencyMs;
     double m_distanceCalcLatencyMs;
 
+    // P1: Per-phase timing metrics for two-stage pipeline (milliseconds)
+    double m_readHeaderDirMs;         // ReadPostingHeaderAndDirectory
+    double m_scanCompactCodesMs;      // ScanCompactCodes
+    double m_mergeCoarseCandidatesMs; // MergeCoarseCandidates
+    double m_buildPayloadReadPlanMs;  // BuildPayloadReadPlan
+    double m_fetchPayloadAndRerankMs; // FetchPayloadPagesAndRerank
+
+    // P2: FetchPayloadPagesAndRerank sub-phase timing (milliseconds)
+    double m_payloadReadWaitMs; // I/O wait for payload pages
+    double m_payloadCopyMs;     // Multi-page payload buffer copy
+    double m_exactDistanceMs;   // Exact distance calculation
+    double m_resultInsertionMs; // Result insertion into QueryResultSet
+
     // Query timeline in monotonic steady-clock nanoseconds
     uint64_t m_queryStartNs;
     uint64_t m_queryEndNs;
@@ -241,9 +351,31 @@ struct SearchStats
     uint64_t m_payloadPageHash;
     uint64_t m_finalResultHash;
 
+    // Payload locality metrics
+    uint64_t m_uniquePayloadPages;
+    uint64_t m_payloadCandidates;
+    uint64_t m_postingsWithPayload;
+    uint64_t m_totalPayloadPageSpans;
+
+    // P2: Coarse recall / miss-case attribution metrics
+    uint64_t m_truthCount;                    // Total truth vectors for this query (typically 10)
+    uint64_t m_coarseRecall;                  // Truth found in coarse candidates (before dedupe)
+    uint64_t m_coarseRecallAfterDedupe;       // Truth found in merged candidates (after dedupe)
+    uint64_t m_rerankRecall;                  // Truth found in rerank candidates
+    uint64_t m_finalRecall;                   // Truth found in final results
+    uint64_t m_truthRecoveredByHeadResult;    // Truth present in final topK without entering rerank candidates
+    uint64_t m_truthDroppedByPerPostingTopR;  // Truth seen in scanned posting but lost at per-posting topR cutoff
+    uint64_t m_truthDroppedByGlobalTopR;      // Truth lost at global topR cutoff
+    uint64_t m_truthDroppedByRerankTopK;      // Truth reranked but not present in final topK
+    uint64_t m_truthMissingPostingNotVisited; // Truth not observed in any scanned posting/chunk
+    uint64_t m_truthMissingNotInPosting;      // Reserved for offline full-membership attribution
+    uint64_t m_resultLimit;                   // Requested final topK for P2 attribution
+
     std::chrono::steady_clock::time_point m_searchRequestTime;
 
     int m_threadID;
+
+    std::vector<PayloadTraceRecord> m_payloadTraceRecords;
 };
 
 struct IndexStats
@@ -510,6 +642,8 @@ struct ExtraWorkSpace : public SPTAG::COMMON::IWorkSpace
         m_payloadDiskRequests.clear();
         m_bestCoarseCandidateByVector.clear();
         m_payloadPageRequestIndex.clear();
+        m_truthBestScannedRank.clear();
+        m_truthScannedPostingCount.clear();
     }
 
     void EnsurePostingMetadataBufferCapacity(size_t p_bufferBytes)
@@ -639,6 +773,11 @@ struct ExtraWorkSpace : public SPTAG::COMMON::IWorkSpace
     std::unordered_map<SizeType, CoarseCandidate> m_bestCoarseCandidateByVector;
 
     std::unordered_map<uint64_t, size_t> m_payloadPageRequestIndex;
+
+    // P2 attribution scratch: populated only when truth is passed to two-stage search.
+    std::unordered_map<SizeType, uint32_t> m_truthBestScannedRank;
+
+    std::unordered_map<SizeType, uint32_t> m_truthScannedPostingCount;
 
     std::vector<Helper::PageBuffer<std::uint8_t>> m_chunkCodeBuffers;
 

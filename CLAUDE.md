@@ -128,3 +128,38 @@ index.Save('output_folder')
 - `NeighborhoodSize` - 图中每个节点的邻居数
 
 完整参数文档见 `docs/Parameters.md`。
+
+## 项目文档与记忆文件
+
+以下文档记录了 SPANN M2/M3 优化工作的进展和状态：
+
+### SIFT1M_Official_Alignment_Summary.md
+官方参数对齐与 strict `UInt8 + DEFAULT` baseline 测试结果总结。
+- 包含完整的 `SearchThreadNum`、`InternalResultNum`、`NumberOfThreads` sweep 结果
+- 记录了参数与性能指标的关系分析
+- 关键结论：st=4~8 是吞吐有效区间，ir=64~96 是 Recall/QPS 平衡区间
+
+### SPANN_M2_M3_Code_Plan_Review_20260501.md
+SPANN M2/M3 代码与验证方案审查记录。
+- 当前结论：two-stage 作为研究线继续，官方 strict baseline 是短期性能主线
+- 记录了各优先级任务的状态和验收条件
+- 包含 P0~P5 的详细实验设计和预期结果
+
+### SPANN_M2_M3_UInt8_Optimization_Memo.md
+P0/P1 优化工作记忆文件，记录具体实验结果。
+- P0：并发 Recall 稳定性验证
+- P1：Two-stage posting 测试与 locality instrumentation
+- P2：Coarse recall / miss-case attribution
+- 最新发现：Fetch Payload & Rerank 占 73.8% phase time，是主要瓶颈
+
+### 当前进度 (2026-05-02)
+
+| 优先级 | 任务 | 状态 |
+|--------|------|------|
+| P0 | 官方 strict baseline 参数产品化 | 已完成 |
+| P1 | two-stage per-phase cost attribution | 已完成 |
+| P2 | query co-hit trace 与 theoretical best packing | 待执行 |
+| P3 | co-hit layout 原型 | 条件执行 |
+| P4 | same-head matched 对照 | 补证 |
+| P5 | M3 pruning | 暂缓 |
+

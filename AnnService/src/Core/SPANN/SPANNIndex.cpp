@@ -47,6 +47,7 @@ struct StaticPostingRuntimeFormat
     bool m_isTwoStage = false;
     bool m_isChunked = false;
     std::string m_layoutType = "legacy";
+    std::string m_payloadLayout = "legacy_full_vector";
 };
 
 enum class ChunkPruneModeKind
@@ -112,6 +113,7 @@ inline StaticPostingRuntimeFormat LoadStaticPostingRuntimeFormat(const Options &
 
     format.m_sidecarExists = true;
     format.m_layoutType = reader.GetParameter("Meta", "LayoutType", std::string("legacy"));
+    format.m_payloadLayout = reader.GetParameter("Meta", "PayloadLayout", std::string("legacy_full_vector"));
     const int formatVersion = reader.GetParameter("Meta", "FormatVersion", 0);
 
     if (Helper::StrUtils::StrEqualIgnoreCase(format.m_layoutType.c_str(), "legacy") || formatVersion <= 0)
@@ -232,6 +234,39 @@ inline ErrorCode ValidatePostingFormatOptions(const Options &options)
         return ErrorCode::Fail;
     }
 
+    const std::string payloadLayout = TrimCopy(options.m_postingPayloadLayout);
+    const bool isFullVectorPayloadLayout =
+        payloadLayout.empty() || Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "FullVector") ||
+        Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "full_vector_payload_v1");
+    const bool isPQCodePayloadLayout = Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "PQCode") ||
+                                       Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "CodeSort") ||
+                                       Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "pq_code_sort_v1");
+    const bool isChunkLocalityPayloadLayout =
+        Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "ChunkLocality") ||
+        Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "chunk_locality_payload_v1");
+    const bool isCoHitPayloadLayout = Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "CoHit") ||
+                                      Helper::StrUtils::StrEqualIgnoreCase(payloadLayout.c_str(), "cohit_payload_v1");
+    if (!isFullVectorPayloadLayout && !isPQCodePayloadLayout && !isChunkLocalityPayloadLayout && !isCoHitPayloadLayout)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Unsupported PostingPayloadLayout: %s\n",
+                     options.m_postingPayloadLayout.c_str());
+        return ErrorCode::Fail;
+    }
+    if (options.m_buildSsdIndex && isCoHitPayloadLayout &&
+        (options.m_postingCohitOrderFile.empty() || !fileexists(options.m_postingCohitOrderFile.c_str())))
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "PostingPayloadLayout=CoHit requires an existing PostingCohitOrderFile. path=%s\n",
+                     options.m_postingCohitOrderFile.c_str());
+        return ErrorCode::Fail;
+    }
+    if (isChunkLocalityPayloadLayout && !options.m_enableChunkedPosting)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "PostingPayloadLayout=ChunkLocality requires EnableChunkedPosting=true.\n");
+        return ErrorCode::Fail;
+    }
+
     if (options.m_enableChunkedPosting && options.m_postingChunkTargetSize <= 0)
     {
         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Chunked two-stage posting requires PostingChunkTargetSize > 0.\n");
@@ -302,6 +337,26 @@ inline ErrorCode ValidatePostingFormatLoadOptions(const Options &options, const 
     if (!format.m_isTwoStage)
     {
         return ErrorCode::Success;
+    }
+
+    const std::string configuredPayloadLayout = TrimCopy(options.m_postingPayloadLayout);
+    const bool requestsDefaultPayloadLayout =
+        configuredPayloadLayout.empty() ||
+        Helper::StrUtils::StrEqualIgnoreCase(configuredPayloadLayout.c_str(), "FullVector");
+    const bool payloadLayoutMatches =
+        Helper::StrUtils::StrEqualIgnoreCase(configuredPayloadLayout.c_str(), format.m_payloadLayout.c_str()) ||
+        (Helper::StrUtils::StrEqualIgnoreCase(configuredPayloadLayout.c_str(), "PQCode") &&
+         Helper::StrUtils::StrEqualIgnoreCase(format.m_payloadLayout.c_str(), "pq_code_sort_v1")) ||
+        (Helper::StrUtils::StrEqualIgnoreCase(configuredPayloadLayout.c_str(), "ChunkLocality") &&
+         Helper::StrUtils::StrEqualIgnoreCase(format.m_payloadLayout.c_str(), "chunk_locality_payload_v1")) ||
+        (Helper::StrUtils::StrEqualIgnoreCase(configuredPayloadLayout.c_str(), "CoHit") &&
+         Helper::StrUtils::StrEqualIgnoreCase(format.m_payloadLayout.c_str(), "cohit_payload_v1"));
+    if (!requestsDefaultPayloadLayout && !payloadLayoutMatches)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "Configured PostingPayloadLayout=%s does not match loaded PayloadLayout=%s.\n",
+                     options.m_postingPayloadLayout.c_str(), format.m_payloadLayout.c_str());
+        return ErrorCode::Fail;
     }
 
     if (options.m_enableDeltaEncoding || options.m_enablePostingListRearrange || options.m_enableDataCompression)
@@ -644,9 +699,8 @@ template <typename T> ErrorCode Index<T>::SearchIndex(QueryResult &p_query, bool
     }
     else
     {
-        ownedQueryResults =
-            std::make_unique<COMMON::QueryResultSet<T>>((const T *)p_query.GetTarget(),
-                                                        m_options.m_searchInternalResultNum);
+        ownedQueryResults = std::make_unique<COMMON::QueryResultSet<T>>((const T *)p_query.GetTarget(),
+                                                                        m_options.m_searchInternalResultNum);
         p_queryResults = ownedQueryResults.get();
     }
 
@@ -869,7 +923,8 @@ ErrorCode Index<T>::SearchIndexWithFilter(QueryResult &p_query, std::function<bo
     return ErrorCode::Fail;
 }
 
-template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, SearchStats *p_stats) const
+template <typename T>
+ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, SearchStats *p_stats, std::set<int> *p_truth) const
 {
     if (nullptr == m_extraSearcher)
         return ErrorCode::EmptyIndex;
@@ -954,8 +1009,13 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
         }
     }
 
+    if (p_stats != nullptr)
+    {
+        p_stats->m_resultLimit = static_cast<uint64_t>(std::max(1, m_options.m_resultNum));
+    }
+
     p_queryResults->Reverse();
-    ErrorCode ret = m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, p_stats);
+    ErrorCode ret = m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, p_stats, p_truth);
     m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
     if (ret != ErrorCode::Success)
         return ret;

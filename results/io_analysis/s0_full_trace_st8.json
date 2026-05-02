@@ -1,0 +1,74 @@
+{
+  "approx_single_thread_qps": 225.9215673968429,
+  "avg_batch_read_total_ms": 2.3992161542,
+  "avg_candidates_per_unique_payload_page": 4.197420339686155,
+  "avg_duplicate_page_like_ratio": 0.0,
+  "avg_duplicate_vector_count": 0.0,
+  "avg_ex_latency_ms": 4.0157137,
+  "avg_io_wait_ms": 0.0,
+  "avg_pages_read": 121.9773,
+  "avg_payload_candidates": 511.99,
+  "avg_payload_physical_bytes": 499619.0208,
+  "avg_payload_read_wait_ms": 2.4002663682,
+  "avg_postings_touched": 63.7521,
+  "avg_recall": 0.97678,
+  "avg_requested_read_bytes": 499619.0208,
+  "avg_total_latency_ms": 4.4263149,
+  "avg_unique_payload_pages": 121.9773,
+  "gini_pages_per_query": 0.07764707687413974,
+  "gini_payload_bytes_per_query": 0.07764707687413974,
+  "gini_payload_wait_per_query": 0.09907619341923146,
+  "input_payload_trace": "/tmp/s0_payload_trace/payload_trace.csv",
+  "input_query_csv": "/tmp/s0_payload_trace/query_io_stats.csv",
+  "io_wait_over_ex": 0.0,
+  "p50_total_latency_ms": 4.457,
+  "p95_ex_latency_ms": 4.84405,
+  "p95_payload_read_wait_ms": 2.9195364499999994,
+  "p95_total_latency_ms": 5.259,
+  "p99_total_latency_ms": 5.688040000000001,
+  "payload_read_wait_over_ex": 0.5977184997526094,
+  "payload_stats_supported": true,
+  "payload_wait_supported": true,
+  "query_count": 10000,
+  "recommendation": {
+    "ranking": [
+      {
+        "direction": "M2-H",
+        "score": 5
+      },
+      {
+        "direction": "M1",
+        "score": 4
+      },
+      {
+        "direction": "M4",
+        "score": 2
+      }
+    ],
+    "reasons": [
+      "payload_read_wait_over_ex is high; read wait is likely dominant",
+      "candidates per unique payload page is low; page fanout/locality is weak",
+      "page hotness concentration is high; cache/coalescing should have room",
+      "cross-query page reuse is visible; global page broker can exploit sharing"
+    ],
+    "top_direction": "M2-H"
+  },
+  "top10_query_share_pages": 0.12113647375372302,
+  "top10_query_share_payload_bytes": 0.12113647375372302,
+  "top10_query_share_payload_wait": 0.1370258022015475,
+  "top1_query_share_payload_wait": 0.027223319863870766,
+  "trace_avg_unique_pages_per_query": 4.624,
+  "trace_avg_unique_postings_per_query": 61.4026,
+  "trace_cross_query_reuse_page_ratio": 1.0,
+  "trace_cross_query_reused_pages": 5,
+  "trace_query_count": 10000,
+  "trace_rows": 5119900,
+  "trace_top10pct_page_hit_share": 0.47374616691732263,
+  "trace_top10pct_posting_hit_share": 0.4132861969960351,
+  "trace_top1pct_page_hit_share": 0.47374616691732263,
+  "trace_top1pct_posting_hit_share": 0.08694486220433993,
+  "trace_total_page_hits": 5119900,
+  "trace_total_posting_hits": 5119900,
+  "trace_unique_pages": 5,
+  "trace_unique_postings": 128814
+}

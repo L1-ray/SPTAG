@@ -135,6 +135,9 @@ namespace SPTAG {
             bool m_enableDetailedIOStats;
             std::string m_detailedIOStatsOutput;
             double m_detailedIOStatsSampleRate;
+            bool m_enablePayloadTrace;
+            std::string m_payloadTraceOutput;
+            double m_payloadTraceSampleRate;
             int m_ssdPostingFormatVersion;
             bool m_enableTwoStagePosting;
             bool m_enableChunkedPosting;
@@ -144,6 +147,9 @@ namespace SPTAG {
             int m_postingChunkTargetSize;
             std::string m_postingChunkPruneMode;
             int m_postingPayloadBatchPages;
+            bool m_enablePayloadReorderByCode;
+            std::string m_postingPayloadLayout;
+            std::string m_postingCohitOrderFile;
 
             int m_searchThreadNum;
 

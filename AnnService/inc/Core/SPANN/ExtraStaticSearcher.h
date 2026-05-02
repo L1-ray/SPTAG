@@ -16,9 +16,16 @@
 #include <cctype>
 #include <climits>
 #include <cmath>
+#include <fstream>
 #include <future>
+#include <limits>
 #include <map>
+#include <mutex>
 #include <numeric>
+#include <set>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace SPTAG
 {
@@ -156,6 +163,15 @@ struct NewPostingCodeRecordPrefix
     uint32_t m_payloadOffset = 0;
 };
 
+enum class PostingPayloadLayoutKind
+{
+    FullVector,
+    PQCode,
+    ChunkLocality,
+    CoHit,
+    Invalid
+};
+
 #define DecompressPosting()                                                                                            \
     {                                                                                                                  \
         p_postingListFullData = (char *)p_exWorkSpace->m_decompressBuffer.GetBuffer();                                 \
@@ -287,6 +303,56 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                                                     "chunked_twostage_v1");
     }
 
+    PostingPayloadLayoutKind GetPostingPayloadLayoutKind() const
+    {
+        if (m_opt == nullptr)
+        {
+            return PostingPayloadLayoutKind::FullVector;
+        }
+
+        const std::string layout = TrimCopy(m_opt->m_postingPayloadLayout);
+        if (layout.empty() || Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "FullVector") ||
+            Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "full_vector_payload_v1"))
+        {
+            return m_opt->m_enablePayloadReorderByCode ? PostingPayloadLayoutKind::PQCode
+                                                       : PostingPayloadLayoutKind::FullVector;
+        }
+        if (Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "PQCode") ||
+            Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "CodeSort") ||
+            Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "pq_code_sort_v1"))
+        {
+            return PostingPayloadLayoutKind::PQCode;
+        }
+        if (Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "ChunkLocality") ||
+            Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "chunk_locality_payload_v1"))
+        {
+            return PostingPayloadLayoutKind::ChunkLocality;
+        }
+        if (Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "CoHit") ||
+            Helper::StrUtils::StrEqualIgnoreCase(layout.c_str(), "cohit_payload_v1"))
+        {
+            return PostingPayloadLayoutKind::CoHit;
+        }
+        return PostingPayloadLayoutKind::Invalid;
+    }
+
+    std::string GetPostingPayloadLayoutName() const
+    {
+        switch (GetPostingPayloadLayoutKind())
+        {
+        case PostingPayloadLayoutKind::FullVector:
+            return "full_vector_payload_v1";
+        case PostingPayloadLayoutKind::PQCode:
+            return "pq_code_sort_v1";
+        case PostingPayloadLayoutKind::ChunkLocality:
+            return "chunk_locality_payload_v1";
+        case PostingPayloadLayoutKind::CoHit:
+            return "cohit_payload_v1";
+        default:
+            return "invalid";
+        }
+    }
+
     uint64_t GetPostingPageKey(int postingID, uint32_t pageID) const
     {
         return (static_cast<uint64_t>(static_cast<uint32_t>(postingID)) << 32) | static_cast<uint64_t>(pageID);
@@ -296,6 +362,14 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
     {
         return (static_cast<uint64_t>(static_cast<uint32_t>(postingID)) << 32) |
                static_cast<uint64_t>(static_cast<uint32_t>(chunkID));
+    }
+
+    size_t GetInitialPostingMetadataReadBytes(uint32_t pageOffset, size_t totalBytes) const
+    {
+        const size_t minDirectoryBytes =
+            std::max(sizeof(NewPostingChunkDirectoryEntry), sizeof(NewPostingChunkDirectoryEntryV2));
+        const size_t minHeaderBytes = static_cast<size_t>(pageOffset) + sizeof(NewPostingHeader) + minDirectoryBytes;
+        return std::min(totalBytes, AlignToPageSize(minHeaderBytes));
     }
 
     void InitWorkSpace(ExtraWorkSpace *p_exWorkSpace, bool clear = false) override
@@ -514,7 +588,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             return fullData;
         };
 
-        auto processPostingBuffer = [&](ListInfo *listInfo, char *postingListData) {
+        auto processPostingBuffer = [&](ListInfo *listInfo, char *postingListData, int postingID) {
             for (int i = 0; i < listInfo->listEleCount; ++i)
             {
                 uint64_t offsetVectorID, offsetVector;
@@ -541,6 +615,21 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 queryResults.AddPoint(vectorID, distance2leaf);
                 distanceCalcLatencyMs += durationMs(distanceStart, std::chrono::steady_clock::now());
                 ++distanceEvaluatedCount;
+
+                // S0: Record payload trace for legacy format
+                if (p_stats != nullptr && m_opt != nullptr && m_opt->m_enablePayloadTrace)
+                {
+                    PayloadTraceRecord record;
+                    record.m_postingID = postingID;
+                    record.m_chunkID = 0;
+                    record.m_vectorID = vectorID;
+                    record.m_payloadPageID = static_cast<uint32_t>(listInfo->listOffset >> PageSizeEx);
+                    record.m_payloadPageCount = listInfo->listPageCount;
+                    record.m_payloadPhysicalOffset = listInfo->listOffset;
+                    record.m_payloadBytes = m_vectorInfoSize;
+                    record.m_coarseDist = distance2leaf;
+                    p_stats->m_payloadTraceRecords.emplace_back(record);
+                }
             }
         };
 
@@ -579,16 +668,16 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             request.m_success = false;
 
 #ifdef BATCH_READ // async batch read
-            request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer](bool success) {
+            request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer, this](bool success) {
                 if (!success)
                     return;
                 char *buffer = request.m_buffer;
                 ListInfo *listInfo = (ListInfo *)(request.m_payload);
-                int postingID = -1;
+                int postingID = static_cast<int>(listInfo - m_listInfos.data());
                 try
                 {
                     char *postingData = decodePostingBuffer(buffer, listInfo, postingID);
-                    processPostingBuffer(listInfo, postingData);
+                    processPostingBuffer(listInfo, postingData, postingID);
                 }
                 catch (...)
                 {
@@ -628,7 +717,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             try
             {
                 char *postingData = decodePostingBuffer(buffer, listInfo, curPostingID);
-                processPostingBuffer(listInfo, postingData);
+                processPostingBuffer(listInfo, postingData, curPostingID);
             }
             catch (...)
             {
@@ -669,7 +758,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             try
             {
                 char *postingData = decodePostingBuffer(buffer, listInfo, postingID);
-                processPostingBuffer(listInfo, postingData);
+                processPostingBuffer(listInfo, postingData, postingID);
             }
             catch (...)
             {
@@ -715,7 +804,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                             ? (m_vectorInfoSize - sizeof(int)) * listInfo->listEleCount + sizeof(int) * i
                             : m_vectorInfoSize * i;
                     int vectorID = *(reinterpret_cast<int *>(p_postingListFullData + offsetVectorID));
-                    if (truth && truth->count(vectorID))
+                    if (truth && truth->count(vectorID) && found)
                         (*found)[curPostingID].insert(vectorID);
                 }
             }
@@ -749,9 +838,6 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                                    QueryResult &p_queryResults, std::shared_ptr<VectorIndex> p_index,
                                    SearchStats *p_stats, std::set<int> *truth, std::map<int, std::set<int>> *found)
     {
-        (void)truth;
-        (void)found;
-
         p_exWorkSpace->m_coarseCandidates.clear();
         p_exWorkSpace->m_mergedCandidates.clear();
         p_exWorkSpace->m_payloadReadRequests.clear();
@@ -762,25 +848,61 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             p_stats->m_rerankCandidateCount = 0;
         }
 
+        // P1: Per-phase timing
+        auto phaseStart = std::chrono::steady_clock::now();
+        auto phaseEnd = phaseStart;
+
         ErrorCode ret = ReadPostingHeaderAndDirectory(p_exWorkSpace, queryResults, p_stats);
         if (ret != ErrorCode::Success)
             return ret;
+        if (p_stats)
+        {
+            phaseEnd = std::chrono::steady_clock::now();
+            p_stats->m_readHeaderDirMs += std::chrono::duration<double, std::milli>(phaseEnd - phaseStart).count();
+            phaseStart = phaseEnd;
+        }
 
-        ret = ScanCompactCodes(p_exWorkSpace, queryResults, p_index, p_stats);
+        ret = ScanCompactCodes(p_exWorkSpace, queryResults, p_index, p_stats, truth, found);
         if (ret != ErrorCode::Success)
             return ret;
+        if (p_stats)
+        {
+            phaseEnd = std::chrono::steady_clock::now();
+            p_stats->m_scanCompactCodesMs += std::chrono::duration<double, std::milli>(phaseEnd - phaseStart).count();
+            phaseStart = phaseEnd;
+        }
 
         ret = MergeCoarseCandidates(p_exWorkSpace, p_stats);
         if (ret != ErrorCode::Success)
             return ret;
+        if (p_stats)
+        {
+            phaseEnd = std::chrono::steady_clock::now();
+            p_stats->m_mergeCoarseCandidatesMs +=
+                std::chrono::duration<double, std::milli>(phaseEnd - phaseStart).count();
+            phaseStart = phaseEnd;
+        }
 
         ret = BuildPayloadReadPlan(p_exWorkSpace, p_stats);
         if (ret != ErrorCode::Success)
             return ret;
+        if (p_stats)
+        {
+            phaseEnd = std::chrono::steady_clock::now();
+            p_stats->m_buildPayloadReadPlanMs +=
+                std::chrono::duration<double, std::milli>(phaseEnd - phaseStart).count();
+            phaseStart = phaseEnd;
+        }
 
         ret = FetchPayloadPagesAndRerank(p_exWorkSpace, queryResults, p_queryResults, p_index, p_stats);
         if (ret != ErrorCode::Success)
             return ret;
+        if (p_stats)
+        {
+            phaseEnd = std::chrono::steady_clock::now();
+            p_stats->m_fetchPayloadAndRerankMs +=
+                std::chrono::duration<double, std::milli>(phaseEnd - phaseStart).count();
+        }
 
         if (p_stats)
         {
@@ -788,6 +910,13 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             p_stats->m_rerankCandidateCount = p_exWorkSpace->m_mergedCandidates.size();
             p_stats->m_finalResultCount = static_cast<uint64_t>(p_queryResults.GetResultNum());
         }
+
+        // P2: Compute miss-case attribution if truth is provided
+        if (truth != nullptr && p_stats != nullptr)
+        {
+            ComputeMissCaseAttribution(p_exWorkSpace, queryResults, p_queryResults, *truth, p_stats);
+        }
+
         return ErrorCode::Success;
     }
 
@@ -1252,10 +1381,9 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 uint32_t totalChunkCodeBytes = 0;
                 uint32_t totalChunkPayloadBytes = 0;
                 size_t chunkCountBeforePosting = p_exWorkSpace->m_postingBlocks.size();
-                ErrorCode cacheRet = AppendPostingBlocksFromCache(*cachedMetadata, postingID, *listInfo, queryResults,
-                                                                  useHardChunkPrune, p_exWorkSpace, p_stats,
-                                                                  totalChunkRecords, totalChunkCodeBytes,
-                                                                  totalChunkPayloadBytes);
+                ErrorCode cacheRet = AppendPostingBlocksFromCache(
+                    *cachedMetadata, postingID, *listInfo, queryResults, useHardChunkPrune, p_exWorkSpace, p_stats,
+                    totalChunkRecords, totalChunkCodeBytes, totalChunkPayloadBytes);
                 if (cacheRet != ErrorCode::Success)
                 {
                     return cacheRet;
@@ -1315,7 +1443,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 return ErrorCode::Fail;
             }
 
-            const size_t firstReadBytes = std::min(totalBytes, static_cast<size_t>(PageSize));
+            const size_t firstReadBytes = GetInitialPostingMetadataReadBytes(listInfo->pageOffset, totalBytes);
             p_exWorkSpace->EnsurePostingMetadataBufferCapacity(firstReadBytes);
             size_t metadataReadBytes = firstReadBytes;
             char *postingMetadataBuffer = reinterpret_cast<char *>(p_exWorkSpace->m_postingMetadataBuffer.GetBuffer());
@@ -1545,7 +1673,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
     }
 
     ErrorCode ScanCompactCodes(ExtraWorkSpace *p_exWorkSpace, COMMON::QueryResultSet<ValueType> &queryResults,
-                               std::shared_ptr<VectorIndex> p_index, SearchStats *p_stats)
+                               std::shared_ptr<VectorIndex> p_index, SearchStats *p_stats,
+                               const std::set<int> *truth = nullptr, std::map<int, std::set<int>> *found = nullptr)
     {
         auto quantizer = GetPostingQuantizer(p_index);
         if (quantizer == nullptr)
@@ -1588,6 +1717,12 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         ErrorCode ret = ReadChunkCodeBlocks(p_exWorkSpace, p_stats);
         if (ret != ErrorCode::Success)
             return ret;
+
+        if (truth != nullptr)
+        {
+            p_exWorkSpace->m_truthBestScannedRank.clear();
+            p_exWorkSpace->m_truthScannedPostingCount.clear();
+        }
 
         for (size_t blockIdx = 0; blockIdx < p_exWorkSpace->m_postingBlocks.size(); ++blockIdx)
         {
@@ -1665,8 +1800,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 candidate.m_payloadOffset = prefix.m_payloadOffset;
                 candidate.m_payloadBytes = block.m_payloadRecordBytes;
                 candidate.m_payloadPhysicalOffset = static_cast<uint64_t>(listInfo.pageOffset) +
-                                                   static_cast<uint64_t>(block.m_payloadOffset) +
-                                                   static_cast<uint64_t>(prefix.m_payloadOffset);
+                                                    static_cast<uint64_t>(block.m_payloadOffset) +
+                                                    static_cast<uint64_t>(prefix.m_payloadOffset);
                 candidate.m_payloadPageID = static_cast<uint32_t>(candidate.m_payloadPhysicalOffset >> PageSizeEx);
                 localCandidates.emplace_back(candidate);
             }
@@ -1677,6 +1812,32 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                               return lhs.m_coarseDist < rhs.m_coarseDist;
                           return lhs.m_vectorID < rhs.m_vectorID;
                       });
+
+            if (truth != nullptr)
+            {
+                for (uint32_t rank = 0; rank < static_cast<uint32_t>(localCandidates.size()); ++rank)
+                {
+                    const auto &candidate = localCandidates[rank];
+                    if (candidate.m_vectorID < 0 || truth->count(static_cast<int>(candidate.m_vectorID)) == 0)
+                    {
+                        continue;
+                    }
+
+                    auto bestRankIter = p_exWorkSpace->m_truthBestScannedRank.find(candidate.m_vectorID);
+                    const uint32_t oneBasedRank = rank + 1;
+                    if (bestRankIter == p_exWorkSpace->m_truthBestScannedRank.end() ||
+                        oneBasedRank < bestRankIter->second)
+                    {
+                        p_exWorkSpace->m_truthBestScannedRank[candidate.m_vectorID] = oneBasedRank;
+                    }
+                    p_exWorkSpace->m_truthScannedPostingCount[candidate.m_vectorID] += 1;
+                    if (found != nullptr)
+                    {
+                        (*found)[candidate.m_postingID].insert(static_cast<int>(candidate.m_vectorID));
+                    }
+                }
+            }
+
             if (localCandidates.size() > static_cast<size_t>(topR))
             {
                 localCandidates.resize(topR);
@@ -1870,8 +2031,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             if (candidate.m_payloadPageCount == 0)
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                             "Candidate payload page span is empty for posting %d vector %d.\n",
-                             candidate.m_postingID, candidate.m_vectorID);
+                             "Candidate payload page span is empty for posting %d vector %d.\n", candidate.m_postingID,
+                             candidate.m_vectorID);
                 return ErrorCode::Fail;
             }
 
@@ -1879,8 +2040,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             auto requestIter = requestByPage.find(startPageKey);
             if (requestIter == requestByPage.end())
             {
-                SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                             "Missing payload request span start for posting %d page %u.\n",
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Missing payload request span start for posting %d page %u.\n",
                              candidate.m_postingID, candidate.m_payloadPageID);
                 return ErrorCode::Fail;
             }
@@ -1891,6 +2051,23 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         {
             p_stats->m_payloadLogicalBytesRead = 0;
             p_stats->m_payloadBytesRead = 0;
+            p_stats->m_uniquePayloadPages = p_exWorkSpace->m_payloadReadRequests.size();
+            p_stats->m_payloadCandidates = p_exWorkSpace->m_mergedCandidates.size();
+
+            std::unordered_set<int> postingsWithPayload;
+            postingsWithPayload.reserve(p_exWorkSpace->m_mergedCandidates.size());
+            uint64_t totalPageSpans = 0;
+            for (const auto &candidate : p_exWorkSpace->m_mergedCandidates)
+            {
+                if (candidate.m_blockIndex < p_exWorkSpace->m_postingBlocks.size() && candidate.m_payloadPageCount > 0)
+                {
+                    postingsWithPayload.insert(candidate.m_postingID);
+                    totalPageSpans += candidate.m_payloadPageCount;
+                }
+            }
+            p_stats->m_postingsWithPayload = postingsWithPayload.size();
+            p_stats->m_totalPayloadPageSpans = totalPageSpans;
+
             uint64_t payloadPageHash = 1469598103934665603ULL;
             for (const auto &request : p_exWorkSpace->m_payloadReadRequests)
             {
@@ -1900,6 +2077,31 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 payloadPageHash = HashMix(payloadPageHash, static_cast<uint64_t>(request.m_pageBytes));
             }
             p_stats->m_payloadPageHash = payloadPageHash;
+
+            if (m_opt != nullptr && m_opt->m_enablePayloadTrace)
+            {
+                p_stats->m_payloadTraceRecords.clear();
+                p_stats->m_payloadTraceRecords.reserve(p_exWorkSpace->m_mergedCandidates.size());
+                for (const auto &candidate : p_exWorkSpace->m_mergedCandidates)
+                {
+                    if (candidate.m_blockIndex >= p_exWorkSpace->m_postingBlocks.size() ||
+                        candidate.m_payloadPageCount == 0)
+                    {
+                        continue;
+                    }
+
+                    PayloadTraceRecord record;
+                    record.m_postingID = candidate.m_postingID;
+                    record.m_chunkID = candidate.m_chunkID;
+                    record.m_vectorID = candidate.m_vectorID;
+                    record.m_payloadPageID = candidate.m_payloadPageID;
+                    record.m_payloadPageCount = candidate.m_payloadPageCount;
+                    record.m_payloadPhysicalOffset = candidate.m_payloadPhysicalOffset;
+                    record.m_payloadBytes = candidate.m_payloadBytes;
+                    record.m_coarseDist = candidate.m_coarseDist;
+                    p_stats->m_payloadTraceRecords.emplace_back(record);
+                }
+            }
         }
         return ErrorCode::Success;
     }
@@ -1908,6 +2110,14 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                                          QueryResult &p_queryResults, std::shared_ptr<VectorIndex> p_index,
                                          SearchStats *p_stats)
     {
+        // P2: Sub-phase timing
+        auto subPhaseStart = std::chrono::steady_clock::now();
+        auto subPhaseEnd = subPhaseStart;
+        double payloadReadWaitMs = 0.0;
+        double payloadCopyMs = 0.0;
+        double exactDistanceMs = 0.0;
+        double resultInsertionMs = 0.0;
+
         if (p_exWorkSpace->m_payloadReadRequests.empty())
         {
             p_queryResults.SetScanned(0);
@@ -1934,6 +2144,9 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         const size_t payloadBatchPages =
             static_cast<size_t>(std::max(1, m_opt != nullptr ? m_opt->m_postingPayloadBatchPages : 1));
         double payloadReadLatencyMs = 0.0;
+
+        // P2: Time payload read wait
+        subPhaseStart = std::chrono::steady_clock::now();
         for (size_t batchStart = 0; batchStart < p_exWorkSpace->m_payloadReadRequests.size();
              batchStart += payloadBatchPages)
         {
@@ -1950,6 +2163,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 return ErrorCode::DiskIOFail;
             }
         }
+        subPhaseEnd = std::chrono::steady_clock::now();
+        payloadReadWaitMs = std::chrono::duration<double, std::milli>(subPhaseEnd - subPhaseStart).count();
 
         for (size_t requestIdx = 0; requestIdx < p_exWorkSpace->m_payloadReadRequests.size(); ++requestIdx)
         {
@@ -1964,6 +2179,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             }
         }
 
+        // P2: Time payload copy and exact distance phases
+        subPhaseStart = std::chrono::steady_clock::now();
         for (const auto &candidate : p_exWorkSpace->m_mergedCandidates)
         {
             if (p_stats)
@@ -1984,8 +2201,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             const ValueType *exactVector = nullptr;
             if (candidate.m_payloadRequestStart == static_cast<size_t>(-1) || candidate.m_payloadPageCount == 0)
             {
-                SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                             "Missing payload request span for posting %d vector %d.\n",
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Missing payload request span for posting %d vector %d.\n",
                              candidate.m_postingID, candidate.m_vectorID);
                 return ErrorCode::Fail;
             }
@@ -1993,13 +2209,15 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             size_t payloadRequestIndex = candidate.m_payloadRequestStart;
             const size_t payloadRequestEnd =
                 candidate.m_payloadRequestStart + static_cast<size_t>(candidate.m_payloadPageCount);
+
+            // P2: Time multi-page payload copy
+            auto copyStart = std::chrono::steady_clock::now();
             while (remainingBytes > 0)
             {
                 if (payloadRequestIndex >= payloadRequestEnd ||
                     payloadRequestIndex >= p_exWorkSpace->m_payloadReadRequests.size())
                 {
-                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                                 "Payload request span overflow for posting %d page %u.\n",
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Payload request span overflow for posting %d page %u.\n",
                                  candidate.m_postingID, pageID);
                     return ErrorCode::Fail;
                 }
@@ -2008,9 +2226,10 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 const auto &diskRequest = p_exWorkSpace->m_payloadDiskRequests[payloadRequestIndex];
                 if (payloadRequest.m_postingID != candidate.m_postingID || payloadRequest.m_pageID != pageID)
                 {
-                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                                 "Payload request span mismatch. posting=%d expectedPage=%u actualPosting=%d actualPage=%u\n",
-                                 candidate.m_postingID, pageID, payloadRequest.m_postingID, payloadRequest.m_pageID);
+                    SPTAGLIB_LOG(
+                        Helper::LogLevel::LL_Error,
+                        "Payload request span mismatch. posting=%d expectedPage=%u actualPosting=%d actualPage=%u\n",
+                        candidate.m_postingID, pageID, payloadRequest.m_postingID, payloadRequest.m_pageID);
                     return ErrorCode::Fail;
                 }
 
@@ -2050,24 +2269,42 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                     ++payloadRequestIndex;
                 }
             }
+            payloadCopyMs +=
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - copyStart).count();
 
             if (!singlePagePayload)
             {
                 exactVector = reinterpret_cast<const ValueType *>(p_exWorkSpace->m_payloadScratch.data());
             }
+
+            // P2: Time exact distance calculation
+            auto distStart = std::chrono::steady_clock::now();
             float exactDist = p_index->ComputeDistance(queryResults.GetTarget(), exactVector);
+            exactDistanceMs +=
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - distStart).count();
+
+            // P2: Time result insertion
+            auto insertStart = std::chrono::steady_clock::now();
             queryResults.AddPoint(candidate.m_vectorID, exactDist);
+            resultInsertionMs +=
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - insertStart).count();
 
             if (p_stats)
             {
                 p_stats->m_distanceEvaluatedCount += 1;
             }
         }
+        subPhaseEnd = std::chrono::steady_clock::now();
 
         if (p_stats)
         {
             p_stats->m_batchReadTotalLatencyMs += payloadReadLatencyMs;
             p_stats->m_diskReadLatency += payloadReadLatencyMs;
+            // P2: Store sub-phase timing
+            p_stats->m_payloadReadWaitMs += payloadReadWaitMs;
+            p_stats->m_payloadCopyMs += payloadCopyMs;
+            p_stats->m_exactDistanceMs += exactDistanceMs;
+            p_stats->m_resultInsertionMs += resultInsertionMs;
         }
 
         p_queryResults.SetScanned(static_cast<int>(p_exWorkSpace->m_mergedCandidates.size()));
@@ -2076,6 +2313,135 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             p_stats->m_finalResultCount = static_cast<uint64_t>(p_queryResults.GetResultNum());
         }
         return ErrorCode::Success;
+    }
+
+    // P2: Compute miss-case attribution for coarse recall analysis
+    void ComputeMissCaseAttribution(ExtraWorkSpace *p_exWorkSpace, COMMON::QueryResultSet<ValueType> &queryResults,
+                                    QueryResult &p_queryResults, const std::set<int> &truth, SearchStats *p_stats)
+    {
+        const size_t truthSize = truth.size();
+        if (truthSize == 0)
+            return;
+
+        p_stats->m_truthCount = static_cast<uint64_t>(truthSize);
+
+        std::unordered_set<int> coarseVectorIDs;
+        coarseVectorIDs.reserve(p_exWorkSpace->m_coarseCandidates.size());
+        for (const auto &candidate : p_exWorkSpace->m_coarseCandidates)
+        {
+            if (candidate.m_vectorID >= 0)
+                coarseVectorIDs.insert(candidate.m_vectorID);
+        }
+
+        std::unordered_set<int> dedupedVectorIDs;
+        dedupedVectorIDs.reserve(p_exWorkSpace->m_bestCoarseCandidateByVector.size());
+        for (const auto &candidatePair : p_exWorkSpace->m_bestCoarseCandidateByVector)
+        {
+            if (candidatePair.first >= 0)
+                dedupedVectorIDs.insert(static_cast<int>(candidatePair.first));
+        }
+
+        std::unordered_set<int> rerankVectorIDs;
+        rerankVectorIDs.reserve(p_exWorkSpace->m_mergedCandidates.size());
+        for (const auto &candidate : p_exWorkSpace->m_mergedCandidates)
+        {
+            if (candidate.m_vectorID >= 0)
+                rerankVectorIDs.insert(candidate.m_vectorID);
+        }
+
+        // Collect requested final topK vector IDs. QueryResultSet is still heap-ordered here, so do not rely on
+        // GetResult(i) order before SearchDiskIndex performs SortResult().
+        std::unordered_set<int> finalVectorIDs;
+        std::vector<BasicResult> finalResults;
+        finalResults.reserve(p_queryResults.GetResultNum());
+        for (int i = 0; i < p_queryResults.GetResultNum(); ++i)
+        {
+            const BasicResult *result = p_queryResults.GetResult(i);
+            if (result != nullptr && result->VID >= 0)
+            {
+                finalResults.emplace_back(*result);
+            }
+        }
+        std::sort(finalResults.begin(), finalResults.end(), COMMON::Compare);
+        const size_t resultLimit = static_cast<size_t>(
+            std::max<uint64_t>(1, p_stats->m_resultLimit > 0 ? p_stats->m_resultLimit : p_queryResults.GetResultNum()));
+        finalVectorIDs.reserve(std::min(finalResults.size(), resultLimit));
+        for (size_t i = 0; i < finalResults.size() && i < resultLimit; ++i)
+        {
+            finalVectorIDs.insert(finalResults[i].VID);
+        }
+
+        // Count truth found at each stage
+        uint64_t coarseRecall = 0;
+        uint64_t dedupedRecall = 0;
+        uint64_t rerankRecall = 0;
+        uint64_t finalRecall = 0;
+        uint64_t recoveredByHeadResult = 0;
+        uint64_t droppedByPerPostingTopR = 0;
+        uint64_t droppedByGlobalTopR = 0;
+        uint64_t droppedByRerankTopK = 0;
+        uint64_t missingPostingNotVisited = 0;
+        uint64_t missingNotInPosting = 0;
+
+        for (int truthVID : truth)
+        {
+            const bool observedInScannedPosting =
+                p_exWorkSpace->m_truthBestScannedRank.find(static_cast<SizeType>(truthVID)) !=
+                p_exWorkSpace->m_truthBestScannedRank.end();
+            bool inCoarse = coarseVectorIDs.count(truthVID) > 0;
+            bool inDeduped = dedupedVectorIDs.count(truthVID) > 0;
+            bool inRerank = rerankVectorIDs.count(truthVID) > 0;
+            bool inFinal = finalVectorIDs.count(truthVID) > 0;
+
+            if (inFinal)
+                finalRecall++;
+
+            if (inDeduped)
+                dedupedRecall++;
+
+            if (inRerank)
+                rerankRecall++;
+
+            if (inCoarse)
+                coarseRecall++;
+
+            if (inFinal)
+            {
+                if (!inRerank)
+                {
+                    recoveredByHeadResult++;
+                }
+                continue;
+            }
+
+            if (!observedInScannedPosting)
+            {
+                missingPostingNotVisited++;
+            }
+            else if (!inCoarse)
+            {
+                droppedByPerPostingTopR++;
+            }
+            else if (!inRerank)
+            {
+                droppedByGlobalTopR++;
+            }
+            else if (!inFinal)
+            {
+                droppedByRerankTopK++;
+            }
+        }
+
+        p_stats->m_coarseRecall = coarseRecall;
+        p_stats->m_coarseRecallAfterDedupe = dedupedRecall;
+        p_stats->m_rerankRecall = rerankRecall;
+        p_stats->m_finalRecall = finalRecall;
+        p_stats->m_truthRecoveredByHeadResult = recoveredByHeadResult;
+        p_stats->m_truthDroppedByPerPostingTopR = droppedByPerPostingTopR;
+        p_stats->m_truthDroppedByGlobalTopR = droppedByGlobalTopR;
+        p_stats->m_truthDroppedByRerankTopK = droppedByRerankTopK;
+        p_stats->m_truthMissingPostingNotVisited = missingPostingNotVisited;
+        p_stats->m_truthMissingNotInPosting = missingNotInPosting;
     }
 
     std::string GetPostingListFullData(int postingListId, size_t p_postingListSize, Selection &p_selections,
@@ -2608,8 +2974,9 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                                     GetPostingListFullData(static_cast<int>(postingListId), curPostingListSizes[j],
                                                            selections, fullVectors, false, false, nullptr);
                                 curPostingListBytes[j] =
-                                    BuildChunkedPostingBlob(postingListFullData, curPostingListSizes[j], vectorInfoSize,
-                                                            quantizer, fullVectors->Dimension())
+                                    BuildChunkedPostingBlob(postingListId, postingListFullData, curPostingListSizes[j],
+                                                            vectorInfoSize, quantizer, fullVectors->Dimension(),
+                                                            GetPostingPayloadLayoutKind())
                                         .size();
                             }
                         });
@@ -2643,10 +3010,10 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                                 std::string postingListFullData =
                                     GetPostingListFullData(static_cast<int>(postingListId), curPostingListSizes[j],
                                                            selections, fullVectors, false, false, nullptr);
-                                curPostingListBytes[j] =
-                                    BuildSingleChunkTwoStagePostingBlob(postingListFullData, curPostingListSizes[j],
-                                                                        vectorInfoSize, quantizer)
-                                        .size();
+                                curPostingListBytes[j] = BuildSingleChunkTwoStagePostingBlob(
+                                                             postingListId, postingListFullData, curPostingListSizes[j],
+                                                             vectorInfoSize, quantizer, GetPostingPayloadLayoutKind())
+                                                             .size();
                             }
                         });
                     }
@@ -2894,8 +3261,9 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                      "Posting %d exact code cache read fell back to aligned read. expected=%zu actual=%llu "
                      "fileOffset=%llu alignedOffset=%llu prefix=%zu readBytes=%zu isChunked=%d\n",
                      postingID, codeBytes, static_cast<unsigned long long>(numRead),
-                     static_cast<unsigned long long>(codeFileOffset), static_cast<unsigned long long>(alignedCodeOffset),
-                     codePrefix, alignedReadBytes, cache.m_isChunked ? 1 : 0);
+                     static_cast<unsigned long long>(codeFileOffset),
+                     static_cast<unsigned long long>(alignedCodeOffset), codePrefix, alignedReadBytes,
+                     cache.m_isChunked ? 1 : 0);
         Helper::PageBuffer<std::uint8_t> codeBuffer;
         codeBuffer.ReservePageBuffer(alignedReadBytes);
         char *codeReadBuffer = reinterpret_cast<char *>(codeBuffer.GetBuffer());
@@ -2939,7 +3307,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             return ErrorCode::Fail;
         }
 
-        const size_t firstReadBytes = std::min(totalBytes, static_cast<size_t>(PageSize));
+        const size_t firstReadBytes = GetInitialPostingMetadataReadBytes(listInfo.pageOffset, totalBytes);
         Helper::PageBuffer<std::uint8_t> metadataBuffer;
         metadataBuffer.ReservePageBuffer(firstReadBytes);
         char *postingMetadataBuffer = reinterpret_cast<char *>(metadataBuffer.GetBuffer());
@@ -2970,14 +3338,13 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         }
 
         const size_t directoryBytes =
-            IsChunkedTwoStagePostingFormat() ? static_cast<size_t>(header.m_chunkCount) *
-                                                   sizeof(NewPostingChunkDirectoryEntryV2)
-                                             : static_cast<size_t>(header.m_chunkCount) *
-                                                   sizeof(NewPostingChunkDirectoryEntry);
+            IsChunkedTwoStagePostingFormat()
+                ? static_cast<size_t>(header.m_chunkCount) * sizeof(NewPostingChunkDirectoryEntryV2)
+                : static_cast<size_t>(header.m_chunkCount) * sizeof(NewPostingChunkDirectoryEntry);
         const size_t centroidBytes =
-            IsChunkedTwoStagePostingFormat() ? static_cast<size_t>(header.m_chunkCount) *
-                                                   static_cast<size_t>(m_iDataDimension) * sizeof(ValueType)
-                                             : 0;
+            IsChunkedTwoStagePostingFormat()
+                ? static_cast<size_t>(header.m_chunkCount) * static_cast<size_t>(m_iDataDimension) * sizeof(ValueType)
+                : 0;
         const size_t metadataBytes =
             static_cast<size_t>(listInfo.pageOffset) + sizeof(NewPostingHeader) + directoryBytes + centroidBytes;
         if (metadataBytes > totalBytes)
@@ -3058,30 +3425,28 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         {
             if (header.m_chunkCount != 1)
             {
-                SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                             "Posting %d uses %u chunks with legacy two-stage layout.\n", postingID,
-                             header.m_chunkCount);
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Posting %d uses %u chunks with legacy two-stage layout.\n",
+                             postingID, header.m_chunkCount);
                 return ErrorCode::Fail;
             }
 
             const NewPostingChunkDirectoryEntry &entry = cache.m_singleChunkEntry;
-            if (header.m_recordCount != entry.m_recordCount || header.m_payloadRecordBytes != entry.m_payloadRecordBytes ||
-                header.m_codeBytes != entry.m_codeBytes || header.m_payloadBytes != entry.m_payloadBytes ||
+            if (header.m_recordCount != entry.m_recordCount ||
+                header.m_payloadRecordBytes != entry.m_payloadRecordBytes || header.m_codeBytes != entry.m_codeBytes ||
+                header.m_payloadBytes != entry.m_payloadBytes ||
                 entry.m_codeOffset + entry.m_codeBytes != entry.m_payloadOffset ||
                 entry.m_payloadOffset > listInfo.listTotalBytes ||
                 entry.m_payloadOffset + entry.m_payloadBytes > listInfo.listTotalBytes)
             {
-                SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Posting %d has invalid single-chunk metadata.\n",
-                             postingID);
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Posting %d has invalid single-chunk metadata.\n", postingID);
                 return ErrorCode::Fail;
             }
 
             PostingBlockInfo block;
             block.m_postingID = postingID;
             block.m_chunkID = 0;
-            block.m_cachedCode = cache.m_codeCache.empty()
-                                     ? nullptr
-                                     : reinterpret_cast<const char *>(cache.m_codeCache.data());
+            block.m_cachedCode =
+                cache.m_codeCache.empty() ? nullptr : reinterpret_cast<const char *>(cache.m_codeCache.data());
             block.m_codeOffset = entry.m_codeOffset;
             block.m_codeBytes = entry.m_codeBytes;
             block.m_codeRecordBytes = header.m_codeRecordBytes;
@@ -3111,8 +3476,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             if (curr.m_codeOffset != prev.m_codeOffset + prev.m_codeBytes)
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
-                             "Posting %d chunk %u code blocks are not contiguous. prevEnd=%u currStart=%u\n",
-                             postingID, chunkID, prev.m_codeOffset + prev.m_codeBytes, curr.m_codeOffset);
+                             "Posting %d chunk %u code blocks are not contiguous. prevEnd=%u currStart=%u\n", postingID,
+                             chunkID, prev.m_codeOffset + prev.m_codeBytes, curr.m_codeOffset);
                 return ErrorCode::Fail;
             }
         }
@@ -3123,10 +3488,10 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             if (entry.m_centroidBytes != static_cast<uint32_t>(m_iDataDimension * sizeof(ValueType)) ||
                 entry.m_recordCount == 0 || entry.m_codeOffset + entry.m_codeBytes > listInfo.listTotalBytes ||
                 entry.m_payloadOffset + entry.m_payloadBytes > listInfo.listTotalBytes ||
-                entry.m_codeOffset < sizeof(NewPostingHeader) +
-                                        static_cast<size_t>(header.m_chunkCount) *
-                                            sizeof(NewPostingChunkDirectoryEntryV2) +
-                                        static_cast<size_t>(header.m_chunkCount) * m_iDataDimension * sizeof(ValueType) ||
+                entry.m_codeOffset <
+                    sizeof(NewPostingHeader) +
+                        static_cast<size_t>(header.m_chunkCount) * sizeof(NewPostingChunkDirectoryEntryV2) +
+                        static_cast<size_t>(header.m_chunkCount) * m_iDataDimension * sizeof(ValueType) ||
                 entry.m_payloadOffset <
                     sizeof(NewPostingHeader) +
                         static_cast<size_t>(header.m_chunkCount) * sizeof(NewPostingChunkDirectoryEntryV2) +
@@ -3147,10 +3512,11 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             block.m_chunkID = static_cast<int>(chunkID);
             block.m_centroidOffset = entry.m_centroidOffset;
             block.m_centroidBytes = entry.m_centroidBytes;
-            block.m_cachedCode = cache.m_codeCache.empty()
-                                     ? nullptr
-                                     : reinterpret_cast<const char *>(cache.m_codeCache.data()) +
-                                           static_cast<size_t>(entry.m_codeOffset - cache.m_chunkEntries.front().m_codeOffset);
+            block.m_cachedCode =
+                cache.m_codeCache.empty()
+                    ? nullptr
+                    : reinterpret_cast<const char *>(cache.m_codeCache.data()) +
+                          static_cast<size_t>(entry.m_codeOffset - cache.m_chunkEntries.front().m_codeOffset);
             block.m_codeOffset = entry.m_codeOffset;
             block.m_codeBytes = entry.m_codeBytes;
             block.m_codeRecordBytes = header.m_codeRecordBytes;
@@ -3166,8 +3532,8 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
 
             if (useHardChunkPrune)
             {
-                const ValueType *centroid = cache.m_centroids.data() +
-                                            static_cast<size_t>(chunkID) * static_cast<size_t>(m_iDataDimension);
+                const ValueType *centroid =
+                    cache.m_centroids.data() + static_cast<size_t>(chunkID) * static_cast<size_t>(m_iDataDimension);
                 block.m_lowerBound = ComputeChunkL2LowerBound(queryResults, centroid, entry.m_radius);
                 if (block.m_lowerBound >= queryResults.worstDist())
                 {
@@ -3285,7 +3651,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                        (m_opt->m_postingCodeType.empty() ? std::string("FullPrecision") : m_opt->m_postingCodeType) +
                        "\n"));
             writeLine((std::string("ChunkPruneMode=") + NormalizeChunkPruneMode() + "\n"));
-            writeLine("PayloadLayout=full_vector_payload_v1\n");
+            writeLine(std::string("PayloadLayout=") + GetPostingPayloadLayoutName() + "\n");
         }
         else
         {
@@ -3664,9 +4030,184 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         return chunkMembers;
     }
 
-    std::string BuildSingleChunkTwoStagePostingBlob(const std::string &postingListFullData, int recordCount,
-                                                    size_t p_spacePerVector,
-                                                    const std::shared_ptr<SPTAG::COMMON::IQuantizer> &quantizer) const
+    std::vector<uint32_t> BuildPQCodeSortedOrder(const std::string &postingListFullData, int recordCount,
+                                                 size_t p_spacePerVector,
+                                                 const std::shared_ptr<SPTAG::COMMON::IQuantizer> &quantizer) const
+    {
+        const size_t quantizeSize = quantizer->QuantizeSize();
+        std::vector<std::pair<std::vector<uint8_t>, uint32_t>> codeWithIndex;
+        codeWithIndex.reserve(recordCount);
+
+        std::vector<uint8_t> codeBuffer(quantizeSize);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(recordCount); ++i)
+        {
+            const char *legacyRecord = postingListFullData.data() + static_cast<size_t>(i) * p_spacePerVector;
+            const char *vectorPtr = legacyRecord + sizeof(int);
+            quantizer->QuantizeVector(vectorPtr, codeBuffer.data(), false);
+            codeWithIndex.emplace_back(std::vector<uint8_t>(codeBuffer.begin(), codeBuffer.end()), i);
+        }
+
+        std::sort(codeWithIndex.begin(), codeWithIndex.end(), [](const auto &a, const auto &b) {
+            if (a.first != b.first)
+            {
+                return a.first < b.first;
+            }
+            return a.second < b.second;
+        });
+
+        std::vector<uint32_t> order;
+        order.reserve(recordCount);
+        for (const auto &entry : codeWithIndex)
+        {
+            order.push_back(entry.second);
+        }
+        return order;
+    }
+
+    bool EnsureCohitPayloadOrderLoaded() const
+    {
+        std::lock_guard<std::mutex> lock(m_cohitOrderMutex);
+        if (m_cohitOrderLoaded)
+        {
+            return m_cohitOrderLoadSucceeded;
+        }
+
+        m_cohitOrderLoaded = true;
+        m_cohitOrderLoadSucceeded = false;
+        m_cohitPayloadOrder.clear();
+
+        if (m_opt == nullptr || m_opt->m_postingCohitOrderFile.empty())
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "PostingPayloadLayout=CoHit requires PostingCohitOrderFile.\n");
+            return false;
+        }
+
+        std::ifstream input(m_opt->m_postingCohitOrderFile.c_str());
+        if (!input.is_open())
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open PostingCohitOrderFile: %s\n",
+                         m_opt->m_postingCohitOrderFile.c_str());
+            return false;
+        }
+
+        std::string line;
+        uint64_t rowCount = 0;
+        while (std::getline(input, line))
+        {
+            if (line.empty() || line[0] == '#')
+            {
+                continue;
+            }
+
+            for (char &ch : line)
+            {
+                if (ch == ',' || ch == '\t')
+                {
+                    ch = ' ';
+                }
+            }
+
+            std::istringstream iss(line);
+            int postingID = -1;
+            int vectorID = -1;
+            uint32_t rank = 0;
+            if (!(iss >> postingID >> vectorID >> rank))
+            {
+                // Header lines are allowed.
+                continue;
+            }
+            if (postingID < 0 || vectorID < 0)
+            {
+                continue;
+            }
+
+            m_cohitPayloadOrder[postingID][vectorID] = rank;
+            ++rowCount;
+        }
+
+        m_cohitOrderLoadSucceeded = rowCount > 0;
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Loaded co-hit payload order from %s, rows=%llu, postings=%zu.\n",
+                     m_opt->m_postingCohitOrderFile.c_str(), static_cast<unsigned long long>(rowCount),
+                     m_cohitPayloadOrder.size());
+        return m_cohitOrderLoadSucceeded;
+    }
+
+    std::vector<uint32_t> BuildCoHitSortedOrder(int postingID, const std::string &postingListFullData, int recordCount,
+                                                size_t p_spacePerVector) const
+    {
+        std::vector<uint32_t> identityOrder;
+        identityOrder.reserve(recordCount);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(recordCount); ++i)
+        {
+            identityOrder.push_back(i);
+        }
+
+        if (!EnsureCohitPayloadOrderLoaded())
+        {
+            return identityOrder;
+        }
+
+        auto postingOrderIter = m_cohitPayloadOrder.find(postingID);
+        if (postingOrderIter == m_cohitPayloadOrder.end())
+        {
+            return identityOrder;
+        }
+
+        const auto &rankByVector = postingOrderIter->second;
+        std::vector<std::pair<uint64_t, uint32_t>> rankWithIndex;
+        rankWithIndex.reserve(recordCount);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(recordCount); ++i)
+        {
+            const char *legacyRecord = postingListFullData.data() + static_cast<size_t>(i) * p_spacePerVector;
+            const int vectorID = *(reinterpret_cast<const int *>(legacyRecord));
+            auto rankIter = rankByVector.find(vectorID);
+            const uint64_t rank =
+                rankIter == rankByVector.end() ? std::numeric_limits<uint32_t>::max() : rankIter->second;
+            rankWithIndex.emplace_back((rank << 32) | i, i);
+        }
+
+        std::sort(rankWithIndex.begin(), rankWithIndex.end());
+        std::vector<uint32_t> order;
+        order.reserve(recordCount);
+        for (const auto &entry : rankWithIndex)
+        {
+            order.push_back(entry.second);
+        }
+        return order;
+    }
+
+    void WriteTwoStageRecordsByOrder(const std::string &postingListFullData, const std::vector<uint32_t> &recordOrder,
+                                     size_t p_spacePerVector,
+                                     const std::shared_ptr<SPTAG::COMMON::IQuantizer> &quantizer, char *codePtr,
+                                     char *payloadPtr, uint32_t codeBytesPerVector,
+                                     uint32_t payloadBytesPerVector) const
+    {
+        for (uint32_t outputIdx = 0; outputIdx < static_cast<uint32_t>(recordOrder.size()); ++outputIdx)
+        {
+            const uint32_t origIdx = recordOrder[outputIdx];
+            const char *legacyRecord = postingListFullData.data() + static_cast<size_t>(origIdx) * p_spacePerVector;
+            const int vectorID = *(reinterpret_cast<const int *>(legacyRecord));
+            const char *vectorPtr = legacyRecord + sizeof(int);
+
+            NewPostingCodeRecordPrefix prefix;
+            prefix.m_vectorID = vectorID;
+            prefix.m_payloadOffset = outputIdx * payloadBytesPerVector;
+            std::memcpy(codePtr + static_cast<size_t>(outputIdx) * codeBytesPerVector, &prefix,
+                        sizeof(NewPostingCodeRecordPrefix));
+            quantizer->QuantizeVector(vectorPtr,
+                                      reinterpret_cast<uint8_t *>(codePtr +
+                                                                  static_cast<size_t>(outputIdx) * codeBytesPerVector +
+                                                                  sizeof(NewPostingCodeRecordPrefix)),
+                                      false);
+            std::memcpy(payloadPtr + static_cast<size_t>(outputIdx) * payloadBytesPerVector, vectorPtr,
+                        payloadBytesPerVector);
+        }
+    }
+
+    std::string BuildSingleChunkTwoStagePostingBlob(int postingID, const std::string &postingListFullData,
+                                                    int recordCount, size_t p_spacePerVector,
+                                                    const std::shared_ptr<SPTAG::COMMON::IQuantizer> &quantizer,
+                                                    PostingPayloadLayoutKind payloadLayout) const
     {
         if (recordCount <= 0)
             return std::string();
@@ -3678,7 +4219,6 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         const uint32_t codeBytesPerVector =
             static_cast<uint32_t>(sizeof(NewPostingCodeRecordPrefix) + quantizer->QuantizeSize());
         const uint32_t payloadBytesPerVector = static_cast<uint32_t>(p_spacePerVector - sizeof(int));
-
         NewPostingHeader header;
         header.m_recordCount = static_cast<uint32_t>(recordCount);
         header.m_codeRecordBytes = codeBytesPerVector;
@@ -3702,32 +4242,34 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
 
         char *codePtr = postingBlob.data() + entry.m_codeOffset;
         char *payloadPtr = postingBlob.data() + entry.m_payloadOffset;
-        for (uint32_t i = 0; i < header.m_recordCount; ++i)
-        {
-            const char *legacyRecord = postingListFullData.data() + static_cast<size_t>(i) * p_spacePerVector;
-            const int vectorID = *(reinterpret_cast<const int *>(legacyRecord));
-            const char *vectorPtr = legacyRecord + sizeof(int);
 
-            NewPostingCodeRecordPrefix prefix;
-            prefix.m_vectorID = vectorID;
-            prefix.m_payloadOffset = i * payloadBytesPerVector;
-            std::memcpy(codePtr + static_cast<size_t>(i) * codeBytesPerVector, &prefix,
-                        sizeof(NewPostingCodeRecordPrefix));
-            quantizer->QuantizeVector(vectorPtr,
-                                      reinterpret_cast<uint8_t *>(codePtr +
-                                                                  static_cast<size_t>(i) * codeBytesPerVector +
-                                                                  sizeof(NewPostingCodeRecordPrefix)),
-                                      false);
-            std::memcpy(payloadPtr + static_cast<size_t>(i) * payloadBytesPerVector, vectorPtr, payloadBytesPerVector);
+        std::vector<uint32_t> recordOrder;
+        if (payloadLayout == PostingPayloadLayoutKind::PQCode && recordCount > 1)
+        {
+            recordOrder = BuildPQCodeSortedOrder(postingListFullData, recordCount, p_spacePerVector, quantizer);
         }
+        else if (payloadLayout == PostingPayloadLayoutKind::CoHit && recordCount > 1)
+        {
+            recordOrder = BuildCoHitSortedOrder(postingID, postingListFullData, recordCount, p_spacePerVector);
+        }
+        else
+        {
+            recordOrder.reserve(recordCount);
+            for (uint32_t i = 0; i < static_cast<uint32_t>(recordCount); ++i)
+            {
+                recordOrder.push_back(i);
+            }
+        }
+        WriteTwoStageRecordsByOrder(postingListFullData, recordOrder, p_spacePerVector, quantizer, codePtr, payloadPtr,
+                                    codeBytesPerVector, payloadBytesPerVector);
 
         return postingBlob;
     }
 
-    std::string BuildChunkedPostingBlob(const std::string &postingListFullData, int recordCount,
+    std::string BuildChunkedPostingBlob(int postingID, const std::string &postingListFullData, int recordCount,
                                         size_t p_spacePerVector,
                                         const std::shared_ptr<SPTAG::COMMON::IQuantizer> &quantizer,
-                                        DimensionType dataDimension) const
+                                        DimensionType dataDimension, PostingPayloadLayoutKind payloadLayout) const
     {
         if (recordCount <= 0)
             return std::string();
@@ -3740,8 +4282,19 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             static_cast<uint32_t>(sizeof(NewPostingCodeRecordPrefix) + quantizer->QuantizeSize());
         const uint32_t payloadBytesPerVector = static_cast<uint32_t>(p_spacePerVector - sizeof(int));
         const uint32_t centroidBytesPerChunk = static_cast<uint32_t>(dataDimension * sizeof(ValueType));
-        const auto chunkMembers =
-            ClusterPostingIntoChunks(postingListFullData, recordCount, p_spacePerVector, dataDimension);
+        auto chunkMembers = ClusterPostingIntoChunks(postingListFullData, recordCount, p_spacePerVector, dataDimension);
+        if (payloadLayout == PostingPayloadLayoutKind::PQCode)
+        {
+            auto sortedOrder = BuildPQCodeSortedOrder(postingListFullData, recordCount, p_spacePerVector, quantizer);
+            chunkMembers.clear();
+            chunkMembers.emplace_back(std::move(sortedOrder));
+        }
+        else if (payloadLayout == PostingPayloadLayoutKind::CoHit)
+        {
+            auto sortedOrder = BuildCoHitSortedOrder(postingID, postingListFullData, recordCount, p_spacePerVector);
+            chunkMembers.clear();
+            chunkMembers.emplace_back(std::move(sortedOrder));
+        }
         const uint32_t chunkCount = static_cast<uint32_t>(chunkMembers.size());
         if (chunkCount == 0)
             return std::string();
@@ -4408,13 +4961,15 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             std::string postingBlob;
             if (enableChunkedPosting)
             {
-                postingBlob = BuildChunkedPostingBlob(postingListFullData, p_postingListSizes[id], p_spacePerVector,
-                                                      quantizer, p_fullVectors->Dimension());
+                postingBlob = BuildChunkedPostingBlob(postingListId, postingListFullData, p_postingListSizes[id],
+                                                      p_spacePerVector, quantizer, p_fullVectors->Dimension(),
+                                                      GetPostingPayloadLayoutKind());
             }
             else
             {
-                postingBlob = BuildSingleChunkTwoStagePostingBlob(postingListFullData, p_postingListSizes[id],
-                                                                  p_spacePerVector, quantizer);
+                postingBlob =
+                    BuildSingleChunkTwoStagePostingBlob(postingListId, postingListFullData, p_postingListSizes[id],
+                                                        p_spacePerVector, quantizer, GetPostingPayloadLayoutKind());
             }
 
             if (postingBlob.size() != actualPostingBytes[id])
@@ -4491,6 +5046,10 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
 
     std::vector<ListInfo> m_listInfos;
     std::vector<PostingRuntimeMetadataCache> m_postingRuntimeMetadata;
+    mutable std::mutex m_cohitOrderMutex;
+    mutable bool m_cohitOrderLoaded = false;
+    mutable bool m_cohitOrderLoadSucceeded = false;
+    mutable std::unordered_map<int, std::unordered_map<int, uint32_t>> m_cohitPayloadOrder;
     bool m_oneContext;
     Options *m_opt;
 
