@@ -215,6 +215,11 @@ namespace SPTAG {
             int m_asyncAppendQueueSize;
             bool m_allowZeroReplica;
 
+            // M1: Global Page Cache parameters
+            bool m_enablePageCache;
+            uint64_t m_pageCacheMaxBytes;
+            bool m_enableInFlightCoalescing;
+
             Options() {
 #define DefineBasicParameter(VarName, VarType, DefaultValue, RepresentStr) \
                 VarName = DefaultValue; \

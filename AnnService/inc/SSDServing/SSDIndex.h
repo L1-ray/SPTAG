@@ -6,6 +6,7 @@
 #include "inc/Core/Common/DistanceUtils.h"
 #include "inc/Core/Common/QueryResultSet.h"
 #include "inc/Core/SPANN/Index.h"
+#include "inc/Core/SPANN/PageCache.h"
 #include "inc/Helper/StringConvert.h"
 #include "inc/Helper/VectorSetReader.h"
 #include "inc/SSDServing/Utils.h"
@@ -207,6 +208,21 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
     std::string outputFile = p_opts.m_searchResult;
     std::string truthFile = p_opts.m_truthPath;
     std::string warmupFile = p_opts.m_warmupPath;
+
+    // M1: Initialize sharded page cache if enabled
+    if (p_opts.m_enablePageCache)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Initializing sharded page cache with %lu bytes...\n",
+                     static_cast<unsigned long>(p_opts.m_pageCacheMaxBytes));
+        SPANN::InitGlobalShardedPageCache(p_opts.m_pageCacheMaxBytes);
+    }
+
+    // M1 Phase B: Initialize coalescer if enabled (separate from cache)
+    if (p_opts.m_enableInFlightCoalescing && !p_opts.m_enablePageCache)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Initializing global in-flight coalescer...\n");
+        SPANN::InitGlobalCoalescer();
+    }
 
     if (p_index->m_pQuantizer)
     {
@@ -743,6 +759,11 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
     PrintPercentiles<double, SPANN::SearchStats>(
         statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_resultInsertionMs; }, "%.3lf");
 
+    // M1: Per-query cache lock wait statistics
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nCache Lock Wait Latency (ms):\n");
+    PrintPercentiles<double, SPANN::SearchStats>(
+        statsForPrint, [](const SPANN::SearchStats &ss) -> double { return ss.m_cacheLockWaitMs; }, "%.6lf");
+
     if (p_opts.m_enableDetailedIOStats && !p_opts.m_detailedIOStatsOutput.empty())
     {
         std::ofstream csvOut(p_opts.m_detailedIOStatsOutput.c_str(), std::ios::out | std::ios::trunc);
@@ -1078,6 +1099,55 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\t\tPosting cut loss: %f percent\n", buildPostingCut / lost * 100);
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\t\tRNG rule loss: %f percent\n", buildRNGRule / lost * 100);
     }
+
+    // M1: Shutdown page cache if it was initialized
+    if (p_opts.m_enablePageCache)
+    {
+        auto* cache = SPANN::GetGlobalShardedPageCache();
+        if (cache)
+        {
+            const auto& stats = cache->GetStats();
+            // B4: Four hard metrics
+            double hitRate = stats.HitRate();
+            uint64_t savedIoPages = stats.m_savedIoPages.load();
+            double lockWaitUs = static_cast<double>(stats.m_cacheLockWaitNs.load()) / 1000.0;
+            uint64_t enqueueDropped = stats.m_asyncInsertDropped.load();
+            uint64_t enqueueTotal = stats.m_asyncInsertQueued.load() + enqueueDropped;
+            double dropRate = enqueueTotal > 0 ? static_cast<double>(enqueueDropped) / enqueueTotal : 0.0;
+
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                         "Sharded page cache stats: hit_rate=%.4f, saved_io_pages=%lu, lock_wait_us=%.2f, enqueue_drop_rate=%.4f\n",
+                         hitRate,
+                         static_cast<unsigned long>(savedIoPages),
+                         lockWaitUs,
+                         dropRate);
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                         "  (hits=%lu, misses=%lu, evictions=%lu, bytes_served=%lu, queued=%lu, dropped=%lu)\n",
+                         static_cast<unsigned long>(stats.m_hits.load()),
+                         static_cast<unsigned long>(stats.m_misses.load()),
+                         static_cast<unsigned long>(stats.m_evictions.load()),
+                         static_cast<unsigned long>(stats.m_bytesServed.load()),
+                         static_cast<unsigned long>(stats.m_asyncInsertQueued.load()),
+                         static_cast<unsigned long>(enqueueDropped));
+        }
+        SPANN::ShutdownGlobalShardedPageCache();
+    }
+
+    // M1 Phase B: Shutdown coalescer if it was initialized
+    if (p_opts.m_enableInFlightCoalescing && !p_opts.m_enablePageCache)
+    {
+        auto* coalescer = SPANN::GetGlobalCoalescer();
+        if (coalescer)
+        {
+            const auto& stats = coalescer->GetStats();
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                         "In-flight coalescer stats: total_requests=%lu, coalesced=%lu\n",
+                         static_cast<unsigned long>(stats.m_totalRequests.load()),
+                         static_cast<unsigned long>(stats.m_coalescedReads.load()));
+        }
+        SPANN::ShutdownGlobalCoalescer();
+    }
+
     return ErrorCode::Success;
 }
 } // namespace SSDIndex

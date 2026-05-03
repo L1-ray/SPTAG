@@ -119,6 +119,12 @@ struct SearchStats
         m_truthMissingPostingNotVisited = 0;
         m_truthMissingNotInPosting = 0;
         m_resultLimit = 0;
+        // M1: Page cache statistics
+        m_cacheHitCount = 0;
+        m_cacheMissCount = 0;
+        m_cacheBytesServed = 0;
+        m_coalescedReads = 0;
+        m_cacheLockWaitMs = 0;
         m_threadID = 0;
         m_searchRequestTime = std::chrono::steady_clock::time_point();
         m_payloadTraceRecords.clear();
@@ -193,6 +199,12 @@ struct SearchStats
         m_truthDroppedByRerankTopK += other.m_truthDroppedByRerankTopK;
         m_truthMissingPostingNotVisited += other.m_truthMissingPostingNotVisited;
         m_truthMissingNotInPosting += other.m_truthMissingNotInPosting;
+        // M1: Page cache statistics
+        m_cacheHitCount += other.m_cacheHitCount;
+        m_cacheMissCount += other.m_cacheMissCount;
+        m_cacheBytesServed += other.m_cacheBytesServed;
+        m_coalescedReads += other.m_coalescedReads;
+        m_cacheLockWaitMs += other.m_cacheLockWaitMs;
     }
 
     void Divide(double divisor)
@@ -267,6 +279,12 @@ struct SearchStats
         m_truthDroppedByRerankTopK = static_cast<uint64_t>(m_truthDroppedByRerankTopK / divisor);
         m_truthMissingPostingNotVisited = static_cast<uint64_t>(m_truthMissingPostingNotVisited / divisor);
         m_truthMissingNotInPosting = static_cast<uint64_t>(m_truthMissingNotInPosting / divisor);
+        // M1: Page cache statistics
+        m_cacheHitCount = static_cast<uint64_t>(m_cacheHitCount / divisor);
+        m_cacheMissCount = static_cast<uint64_t>(m_cacheMissCount / divisor);
+        m_cacheBytesServed = static_cast<uint64_t>(m_cacheBytesServed / divisor);
+        m_coalescedReads = static_cast<uint64_t>(m_coalescedReads / divisor);
+        m_cacheLockWaitMs /= divisor;
     }
 
     int m_check;
@@ -370,6 +388,13 @@ struct SearchStats
     uint64_t m_truthMissingPostingNotVisited; // Truth not observed in any scanned posting/chunk
     uint64_t m_truthMissingNotInPosting;      // Reserved for offline full-membership attribution
     uint64_t m_resultLimit;                   // Requested final topK for P2 attribution
+
+    // M1: Page cache statistics
+    uint64_t m_cacheHitCount;                // Number of page cache hits
+    uint64_t m_cacheMissCount;               // Number of page cache misses
+    uint64_t m_cacheBytesServed;             // Bytes served from cache
+    uint64_t m_coalescedReads;               // Number of coalesced I/O requests
+    double m_cacheLockWaitMs;                // Per-query cache lock wait time (milliseconds)
 
     std::chrono::steady_clock::time_point m_searchRequestTime;
 

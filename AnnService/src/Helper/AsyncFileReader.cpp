@@ -72,10 +72,20 @@ bool BatchReadFileAsync(std::vector<std::shared_ptr<Helper::DiskIO>> &handlers, 
     std::vector<int> done(handlers.size(), 0);
     int totalToSubmit = 0, iocp = 0;
 
+    // Track zero-size requests (cache hits) for immediate callback
+    std::vector<int> zeroSizeIndices;
+
     memset(myiocbs.data(), 0, num * sizeof(struct iocb));
     for (int i = 0; i < num; i++)
     {
         AsyncReadRequest *readRequest = &(readRequests[i]);
+
+        // Skip zero-size requests (cache hits) - they don't need I/O
+        if (readRequest->m_readSize == 0)
+        {
+            zeroSizeIndices.push_back(i);
+            continue;
+        }
 
         iocp = readRequest->m_status & 0xffff;
         int fileid = (readRequest->m_status >> 16);
@@ -89,6 +99,21 @@ bool BatchReadFileAsync(std::vector<std::shared_ptr<Helper::DiskIO>> &handlers, 
         myiocb->aio_offset = static_cast<std::int64_t>(readRequest->m_offset);
 
         iocbs[fileid].emplace_back(myiocb);
+    }
+
+    // Call callbacks for zero-size requests immediately (already processed from cache)
+    for (int idx : zeroSizeIndices)
+    {
+        if (readRequests[idx].m_callback)
+        {
+            readRequests[idx].m_callback(true);
+        }
+    }
+
+    // If no I/O needed, return early
+    if (totalToSubmit == 0)
+    {
+        return true;
     }
 
     std::vector<struct io_event> events(totalToSubmit);

@@ -136,6 +136,12 @@ DefineSSDParameter(m_detailedIOStatsSampleRate, double, 1.0, "DetailedIOStatsSam
 DefineSSDParameter(m_enablePayloadTrace, bool, false, "EnablePayloadTrace")
 DefineSSDParameter(m_payloadTraceOutput, std::string, std::string(""), "PayloadTraceOutput")
 DefineSSDParameter(m_payloadTraceSampleRate, double, 1.0, "PayloadTraceSampleRate")
+
+// M1: Global Page Cache parameters
+DefineSSDParameter(m_enablePageCache, bool, false, "EnablePageCache")
+DefineSSDParameter(m_pageCacheMaxBytes, uint64_t, 256 * 1024 * 1024, "PageCacheMaxBytes")
+DefineSSDParameter(m_enableInFlightCoalescing, bool, true, "EnableInFlightCoalescing")
+
 DefineSSDParameter(m_ssdPostingFormatVersion, int, 0, "SSDPostingFormatVersion")
 DefineSSDParameter(m_enableTwoStagePosting, bool, false, "EnableTwoStagePosting")
 DefineSSDParameter(m_enableChunkedPosting, bool, false, "EnableChunkedPosting")

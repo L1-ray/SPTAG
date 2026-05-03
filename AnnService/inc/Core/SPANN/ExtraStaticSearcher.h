@@ -6,6 +6,7 @@
 
 #include "Compressor.h"
 #include "IExtraSearcher.h"
+#include "PageCache.h"
 #include "inc/Core/Common/IQuantizer.h"
 #include "inc/Core/Common/SIMDUtils.h"
 #include "inc/Core/Common/TruthSet.h"
@@ -667,13 +668,74 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             request.m_payload = (void *)listInfo;
             request.m_success = false;
 
-#ifdef BATCH_READ // async batch read
-            request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer, this](bool success) {
+#ifdef BATCH_READ
+            // M1 B1-B2: Read cache + async insert (NO admission for ablation)
+            // B1: TryGet only covers single-page requests
+            // B2: Async enqueue on I/O complete, drop if queue full
+            // B3: DISABLED for this ablation - always cache single-page
+            ShardedPageCache* pc = GetGlobalShardedPageCache();
+            bool enableCache = (pc != nullptr && m_opt != nullptr && m_opt->m_enablePageCache);
+            bool isSinglePage = (listInfo->listPageCount == 1);
+
+            // B1: Check cache for single-page postings
+            if (enableCache && isSinglePage)
+            {
+                uint32_t firstPageId = static_cast<uint32_t>(listInfo->listOffset >> PageSizeEx);
+                PageCacheKey cacheKey(static_cast<uint32_t>(fileid), firstPageId, PageSize);
+
+                char *buffer = (char *)((p_exWorkSpace->m_pageBuffers[pi]).GetBuffer());
+                uint32_t bytesCopied = 0;
+                uint64_t lockWaitNs = 0;
+                if (pc->TryGet(cacheKey, buffer, &bytesCopied, &lockWaitNs))
+                {
+                    // Cache hit! Process directly without I/O
+                    if (p_stats)
+                    {
+                        p_stats->m_cacheLockWaitMs += static_cast<double>(lockWaitNs) / 1000000.0;
+                        p_stats->m_cacheHitCount++;
+                    }
+                    try
+                    {
+                        char *postingData = decodePostingBuffer(buffer, listInfo, curPostingID);
+                        processPostingBuffer(listInfo, postingData, curPostingID);
+                    }
+                    catch (...)
+                    {
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to decode/process posting %d from cache.\n", curPostingID);
+                    }
+                    // Mark this request as completed (no I/O needed)
+                    // Set dummy callback to avoid bad_function_call in BatchReadFileAsync
+                    request.m_readSize = 0;
+                    request.m_callback = [](bool) {};
+                    continue;
+                }
+                else if (p_stats)
+                {
+                    // Cache miss - still record lock wait time
+                    p_stats->m_cacheLockWaitMs += static_cast<double>(lockWaitNs) / 1000000.0;
+                    p_stats->m_cacheMissCount++;
+                }
+            }
+
+            // B2: Cache all single-page postings (no admission control)
+            // B3 disabled: Always cache single-page, no 2-hit check
+
+            // Cache miss or multi-page posting: issue I/O with callback
+            request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer, pc, enableCache, isSinglePage, fileid, this](bool success) {
                 if (!success)
                     return;
                 char *buffer = request.m_buffer;
                 ListInfo *listInfo = (ListInfo *)(request.m_payload);
                 int postingID = static_cast<int>(listInfo - m_listInfos.data());
+
+                // B2: Async insert all single-page postings (no admission)
+                if (enableCache && isSinglePage && pc != nullptr)
+                {
+                    uint32_t firstPageId = static_cast<uint32_t>(request.m_offset >> PageSizeEx);
+                    PageCacheKey cacheKey(static_cast<uint32_t>(fileid), firstPageId, PageSize);
+                    pc->AsyncInsert(cacheKey, buffer, PageSize);  // Drops if queue full
+                }
+
                 try
                 {
                     char *postingData = decodePostingBuffer(buffer, listInfo, postingID);
@@ -681,8 +743,7 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 }
                 catch (...)
                 {
-                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to decode/process posting %d in batch callback.\n",
-                                 postingID);
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to decode/process posting %d.\n", postingID);
                 }
             };
 #else // async read
