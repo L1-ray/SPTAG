@@ -142,6 +142,16 @@ DefineSSDParameter(m_enablePageCache, bool, false, "EnablePageCache")
 DefineSSDParameter(m_pageCacheMaxBytes, uint64_t, 256 * 1024 * 1024, "PageCacheMaxBytes")
 DefineSSDParameter(m_enableInFlightCoalescing, bool, true, "EnableInFlightCoalescing")
 
+// M2-H: Selective Hybrid Code-First parameters
+DefineSSDParameter(m_enablePostingTrace, bool, false, "EnablePostingTrace")
+DefineSSDParameter(m_postingTraceOutput, std::string, std::string(""), "PostingTraceOutput")
+DefineSSDParameter(m_selectiveHybridPostingList, std::string, std::string(""), "SelectiveHybridPostingList")
+DefineSSDParameter(m_selectiveHybridModeAllowlist, bool, true, "SelectiveHybridModeAllowlist")
+
+// M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
+DefineSSDParameter(m_enablePreDedupeTrace, bool, false, "EnablePreDedupeTrace")
+DefineSSDParameter(m_preDedupeTraceOutput, std::string, std::string(""), "PreDedupeTraceOutput")
+
 DefineSSDParameter(m_ssdPostingFormatVersion, int, 0, "SSDPostingFormatVersion")
 DefineSSDParameter(m_enableTwoStagePosting, bool, false, "EnableTwoStagePosting")
 DefineSSDParameter(m_enableChunkedPosting, bool, false, "EnableChunkedPosting")

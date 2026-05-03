@@ -451,6 +451,89 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
         }
     }
 
+    // M2-H Phase 1: Output per-posting I/O trace for bad posting identification
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Posting trace check: enable=%d output=%s\n",
+                 p_opts.m_enablePostingTrace ? 1 : 0, p_opts.m_postingTraceOutput.c_str());
+    if (p_opts.m_enablePostingTrace && !p_opts.m_postingTraceOutput.empty())
+    {
+        std::ofstream traceOut(p_opts.m_postingTraceOutput.c_str(), std::ios::out | std::ios::trunc);
+        if (!traceOut.is_open())
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open posting trace CSV: %s\n",
+                         p_opts.m_postingTraceOutput.c_str());
+        }
+        else
+        {
+            traceOut << "query_id,posting_index,posting_id,list_page_count,list_ele_count,requested_bytes,"
+                        "io_wait_ms,cache_hit\n";
+            traceOut << std::fixed << std::setprecision(6);
+
+            uint64_t rowsWritten = 0;
+            for (int i = 0; i < effectiveQueries; ++i)
+            {
+                const auto &records = stats[i].m_postingTraceRecords;
+                for (size_t postingIndex = 0; postingIndex < records.size(); ++postingIndex)
+                {
+                    const auto &record = records[postingIndex];
+                    traceOut << i << "," << postingIndex << "," << record.m_postingID << ","
+                             << record.m_listPageCount << "," << record.m_listEleCount << ","
+                             << record.m_requestedBytes << "," << record.m_ioWaitMs << ","
+                             << (record.m_cacheHit ? 1 : 0) << "\n";
+                    ++rowsWritten;
+                }
+            }
+
+            traceOut.close();
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Posting trace CSV saved to %s, rows=%llu\n",
+                         p_opts.m_postingTraceOutput.c_str(), static_cast<unsigned long long>(rowsWritten));
+        }
+
+        for (int i = 0; i < effectiveQueries; ++i)
+        {
+            stats[i].m_postingTraceRecords.clear();
+            stats[i].m_postingTraceRecords.shrink_to_fit();
+        }
+    }
+
+    // M4-0: Output pre-dedupe trace for primary-secondary payload dedupe analysis
+    if (p_opts.m_enablePreDedupeTrace && !p_opts.m_preDedupeTraceOutput.empty())
+    {
+        std::ofstream traceOut(p_opts.m_preDedupeTraceOutput.c_str(), std::ios::out | std::ios::trunc);
+        if (!traceOut.is_open())
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open pre-dedupe trace CSV: %s\n",
+                         p_opts.m_preDedupeTraceOutput.c_str());
+        }
+        else
+        {
+            traceOut << "query_id,posting_id,vector_id,payload_bytes,coarse_dist,was_deduped\n";
+            traceOut << std::fixed << std::setprecision(6);
+
+            uint64_t rowsWritten = 0;
+            for (int i = 0; i < effectiveQueries; ++i)
+            {
+                const auto &records = stats[i].m_preDedupeTraceRecords;
+                for (size_t traceIndex = 0; traceIndex < records.size(); ++traceIndex)
+                {
+                    const auto &record = records[traceIndex];
+                    traceOut << i << "," << record.m_postingID << "," << record.m_vectorID << ","
+                             << record.m_payloadBytes << "," << record.m_coarseDist << ","
+                             << (record.m_wasDeduped ? 1 : 0) << "\n";
+                    ++rowsWritten;
+                }
+            }
+            traceOut.close();
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Pre-dedupe trace CSV saved to %s, rows=%llu\n",
+                         p_opts.m_preDedupeTraceOutput.c_str(), static_cast<unsigned long long>(rowsWritten));
+        }
+        // Clear records to free memory
+        for (int i = 0; i < effectiveQueries; ++i)
+        {
+            stats[i].m_preDedupeTraceRecords.clear();
+            stats[i].m_preDedupeTraceRecords.shrink_to_fit();
+        }
+    }
+
     std::vector<SPANN::SearchStats> statsForPrint;
     if (effectiveQueries > 0)
     {

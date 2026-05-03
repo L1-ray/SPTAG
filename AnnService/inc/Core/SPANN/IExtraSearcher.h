@@ -34,6 +34,30 @@ struct PayloadTraceRecord
     uint64_t m_payloadPhysicalOffset = 0;
     uint32_t m_payloadBytes = 0;
     float m_coarseDist = MaxDist;
+    // M2-H Phase 1: Per-posting I/O metrics for bad posting identification
+    double m_ioWaitMs = 0.0;          // I/O wait time for this posting (legacy path)
+    uint32_t m_listEleCount = 0;      // Number of elements in this posting
+};
+
+// M2-H Phase 1: Per-posting I/O trace for bad posting identification
+struct PostingTraceRecord
+{
+    int m_postingID = -1;
+    uint32_t m_listPageCount = 0;     // Number of pages this posting occupies
+    uint32_t m_listEleCount = 0;      // Number of vectors in this posting
+    uint64_t m_requestedBytes = 0;    // Bytes requested for this posting
+    double m_ioWaitMs = 0.0;          // I/O wait time for this posting
+    bool m_cacheHit = false;          // Whether this posting was served from cache
+};
+
+// M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
+struct PreDedupeTraceRecord
+{
+    int m_postingID = -1;
+    SizeType m_vectorID = -1;
+    uint32_t m_payloadBytes = 0;      // Full vector payload size (e.g., 128 bytes for SIFT1M)
+    float m_coarseDist = MaxDist;     // Coarse distance (filled only if not deduped)
+    bool m_wasDeduped = true;         // Default: deduped; set false if VID survived dedupe
 };
 
 struct SearchStats
@@ -128,6 +152,8 @@ struct SearchStats
         m_threadID = 0;
         m_searchRequestTime = std::chrono::steady_clock::time_point();
         m_payloadTraceRecords.clear();
+        m_postingTraceRecords.clear();
+        m_preDedupeTraceRecords.clear();
     }
 
     void Add(const SearchStats &other)
@@ -401,6 +427,10 @@ struct SearchStats
     int m_threadID;
 
     std::vector<PayloadTraceRecord> m_payloadTraceRecords;
+    // M2-H Phase 1: Per-posting I/O trace for bad posting identification
+    std::vector<PostingTraceRecord> m_postingTraceRecords;
+    // M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
+    std::vector<PreDedupeTraceRecord> m_preDedupeTraceRecords;
 };
 
 struct IndexStats

@@ -220,6 +220,16 @@ namespace SPTAG {
             uint64_t m_pageCacheMaxBytes;
             bool m_enableInFlightCoalescing;
 
+            // M2-H: Selective Hybrid Code-First parameters
+            bool m_enablePostingTrace;              // Enable per-posting I/O trace for bad posting identification
+            std::string m_postingTraceOutput;       // Output file for per-posting trace
+            std::string m_selectiveHybridPostingList; // File containing posting IDs to use two-stage path
+            bool m_selectiveHybridModeAllowlist;    // true = allowlist, false = denylist
+
+            // M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
+            bool m_enablePreDedupeTrace;
+            std::string m_preDedupeTraceOutput;
+
             Options() {
 #define DefineBasicParameter(VarName, VarType, DefaultValue, RepresentStr) \
                 VarName = DefaultValue; \
@@ -303,11 +313,11 @@ namespace SPTAG {
 
                     ;
                 }
-                else if (Helper::StrUtils::StrEqualIgnoreCase(p_section, "BuildSSDIndex")) {
+                else if (Helper::StrUtils::StrEqualIgnoreCase(p_section, "BuildSSDIndex") ||
+                         Helper::StrUtils::StrEqualIgnoreCase(p_section, "SearchSSDIndex")) {
 #define DefineSSDParameter(VarName, VarType, DefaultValue, RepresentStr) \
     if (Helper::StrUtils::StrEqualIgnoreCase(p_param, RepresentStr)) \
     { \
-        SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Setting %s with value %s\n", RepresentStr, p_value); \
         VarType tmp; \
         if (Helper::Convert::ConvertStringTo<VarType>(p_value, tmp)) \
         { \
@@ -363,7 +373,8 @@ namespace SPTAG {
 
                     ;
                 }
-                else if (Helper::StrUtils::StrEqualIgnoreCase(p_section, "BuildSSDIndex")) {
+                else if (Helper::StrUtils::StrEqualIgnoreCase(p_section, "BuildSSDIndex") ||
+                         Helper::StrUtils::StrEqualIgnoreCase(p_section, "SearchSSDIndex")) {
 #define DefineSSDParameter(VarName, VarType, DefaultValue, RepresentStr) \
         if (Helper::StrUtils::StrEqualIgnoreCase(p_param, RepresentStr)) \
         { \

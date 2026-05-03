@@ -54,6 +54,23 @@ cd build && cmake -A x64 -DSPDK=OFF -DROCKSDB=OFF ..
 
 测试文件位于 `Test/src/` (AlgoTest.cpp, DistanceTest.cpp, SIMDTest.cpp, SPFreshTest.cpp 等)
 
+## 已知编译问题
+
+### server 目标编译失败
+
+`server` 可执行文件因 Boost 版本兼容问题编译失败：
+
+```
+AnnService/inc/Socket/Connection.h:14:10: 致命错误：boost/asio/io_service_strand.hpp：没有那个文件或目录
+```
+
+这是 Boost 版本兼容性问题（新版本 Boost 路径变更），与项目代码修改无关。
+
+**解决方案**：
+- 当前环境 Boost 版本较新，`io_service_strand.hpp` 路径已变更
+- 如需编译 server，需要修改 `Connection.h` 中的 include 路径，或降级 Boost 版本
+- 其他目标（`ssdserving`、`indexbuilder`、`indexsearcher`、`spfresh` 等）编译正常
+
 ## 代码格式化
 
 使用 clang-format，基于 Microsoft 风格：
@@ -156,8 +173,8 @@ PageCacheMaxBytes=268435456
 ### SPANN_Beyond_Official_Baseline_Plan_20260502.md
 **主要规划文档**，定义了在官方 strict `UInt8 + DEFAULT` baseline 上超越官方的目标和路径。
 - 目标：st8 QPS >= 5945，Recall@10 >= 0.978319
-- M1: Global I/O broker + page cache + in-flight coalescing
-- M2-H: Hybrid selective code-first for bad postings
+- M1: Global I/O broker + page cache + in-flight coalescing **(已完成)**
+- M2-H: Hybrid selective code-first for bad postings **(已证伪: I/O wait 分布均匀)**
 - M4: Primary-secondary payload dedupe
 - 包含完整的 S0 诊断结果和 M1 实现完成报告
 
@@ -188,7 +205,7 @@ P0/P1 优化工作记忆文件，记录具体实验结果。
 | M1 Phase 2 | Verification + latency analysis | **已完成** | 256MB plateau，p99.9 恶化 3x |
 | M1 Phase 3 | Shard Lock implementation | **已完成** | p99.9 问题解决，QPS +5.0% |
 | M1 收尾 | 日志保存 + st sweep + 统计修正 | **已完成** | st1 回退 -6.2%，st4 回退 -4.8% |
-| M2-H | Hybrid selective code-first | 暂缓 | 等待 M1 完成后评估 |
+| M2-H Phase 1 | Per-posting I/O trace diagnosis | **已完成** | **STOPPED**: I/O wait 分布均匀 (29.63% < 30%) |
 | M4 | Primary-secondary dedupe | 暂缓 | 需要更多 duplicate VID 证据 |
 
 ### M1 最终状态
@@ -234,3 +251,33 @@ grep "Page cache stats" results/io_analysis/m1_test/*.log
 # 对比 baseline
 ./Release/ssdserving results/io_analysis/m1_test/m1_test_st8.ini
 ```
+
+## 配置文件注意事项
+
+### SimpleIniReader 限制
+
+**重要**：`SimpleIniReader` 只支持 `;` 作为注释符，**不支持 `#`、`//` 等**。
+
+```ini
+; 正确 - 使用分号注释
+; EnablePageCache=true
+
+# 错误 - 井号不是注释符，会导致解析失败
+# This will break parsing
+EnablePostingTrace=true
+```
+
+使用 `#` 注释会导致：
+1. 该行解析失败
+2. 后续参数可能被跳过或错位
+3. 错误是**静默的**，不会报错但参数不会被设置
+
+### Debug 配置解析问题
+
+如果参数没有被正确设置：
+
+1. 检查注释符是否正确（必须用 `;`）
+2. 检查 section 名称是否正确（`[Base]`、`[SearchSSDIndex]` 等）
+3. 检查参数名拼写和大小写（虽然 `StrEqualIgnoreCase` 会忽略大小写）
+4. 在 `Options::SetParameter` 中添加日志确认解析路径
+

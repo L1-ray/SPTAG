@@ -549,6 +549,18 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
         double postingParseLatencyMs = 0;
         double distanceCalcLatencyMs = 0;
 
+        // M2-H Phase 1: Per-posting I/O trace for bad posting identification
+        // Only allocate when tracing is enabled to avoid hot-path overhead
+        bool enablePostingTrace = (m_opt != nullptr && m_opt->m_enablePostingTrace);
+        std::vector<std::chrono::steady_clock::time_point> postingIoIssueTime;
+        std::vector<double> postingIoWaitMs;
+        std::vector<bool> postingCacheHit;
+        if (enablePostingTrace) {
+            postingIoIssueTime.resize(postingListCount);
+            postingIoWaitMs.resize(postingListCount, 0.0);
+            postingCacheHit.resize(postingListCount, false);
+        }
+
         auto durationMs = [](const std::chrono::steady_clock::time_point &start,
                              const std::chrono::steady_clock::time_point &end) -> double {
             return std::chrono::duration<double, std::milli>(end - start).count();
@@ -599,6 +611,18 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 int vectorID = *(reinterpret_cast<int *>(postingListData + offsetVectorID));
                 postingParseLatencyMs += durationMs(parseStart, std::chrono::steady_clock::now());
 
+                // M4-0: Record pre-dedupe trace BEFORE CheckAndSet
+                // This captures ALL VIDs read from disk, including duplicates
+                if (p_stats != nullptr && m_opt != nullptr && m_opt->m_enablePreDedupeTrace)
+                {
+                    PreDedupeTraceRecord record;
+                    record.m_postingID = postingID;
+                    record.m_vectorID = vectorID;
+                    record.m_payloadBytes = m_vectorInfoSize;
+                    // m_coarseDist and m_wasDeduped will be updated after dedupe check
+                    p_stats->m_preDedupeTraceRecords.emplace_back(record);
+                }
+
                 if (p_exWorkSpace->m_deduper.CheckAndSet(vectorID))
                 {
                     --listElements;
@@ -616,6 +640,14 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                 queryResults.AddPoint(vectorID, distance2leaf);
                 distanceCalcLatencyMs += durationMs(distanceStart, std::chrono::steady_clock::now());
                 ++distanceEvaluatedCount;
+
+                // M4-0: Mark pre-dedupe record as survived (not deduped)
+                if (p_stats != nullptr && m_opt != nullptr && m_opt->m_enablePreDedupeTrace
+                    && !p_stats->m_preDedupeTraceRecords.empty())
+                {
+                    p_stats->m_preDedupeTraceRecords.back().m_wasDeduped = false;
+                    p_stats->m_preDedupeTraceRecords.back().m_coarseDist = distance2leaf;
+                }
 
                 // S0: Record payload trace for legacy format
                 if (p_stats != nullptr && m_opt != nullptr && m_opt->m_enablePayloadTrace)
@@ -694,6 +726,11 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
                         p_stats->m_cacheLockWaitMs += static_cast<double>(lockWaitNs) / 1000000.0;
                         p_stats->m_cacheHitCount++;
                     }
+                    // M2-H Phase 1: Record cache hit for this posting
+                    if (enablePostingTrace) {
+                        postingCacheHit[pi] = true;
+                        postingIoWaitMs[pi] = 0.0;  // No I/O wait for cache hit
+                    }
                     try
                     {
                         char *postingData = decodePostingBuffer(buffer, listInfo, curPostingID);
@@ -720,10 +757,22 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             // B2: Cache all single-page postings (no admission control)
             // B3 disabled: Always cache single-page, no 2-hit check
 
+            // M2-H Phase 1: Record I/O issue time for this posting (only when tracing)
+            if (enablePostingTrace) {
+                postingIoIssueTime[pi] = std::chrono::steady_clock::now();
+            }
+
             // Cache miss or multi-page posting: issue I/O with callback
-            request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer, pc, enableCache, isSinglePage, fileid, this](bool success) {
+            request.m_callback = [&request, &decodePostingBuffer, &processPostingBuffer, pc, enableCache, isSinglePage, fileid, enablePostingTrace, &postingIoWaitMs, &postingIoIssueTime, pi, this](bool success) {
                 if (!success)
                     return;
+
+                // M2-H Phase 1: Calculate I/O wait time for this posting (only when tracing)
+                if (enablePostingTrace) {
+                    auto ioCompleteTime = std::chrono::steady_clock::now();
+                    postingIoWaitMs[pi] = std::chrono::duration<double, std::milli>(ioCompleteTime - postingIoIssueTime[pi]).count();
+                }
+
                 char *buffer = request.m_buffer;
                 ListInfo *listInfo = (ListInfo *)(request.m_payload);
                 int postingID = static_cast<int>(listInfo - m_listInfos.data());
@@ -890,6 +939,27 @@ template <typename ValueType> class ExtraStaticSearcher : public IExtraSearcher
             p_stats->m_distanceCalcLatencyMs = distanceCalcLatencyMs;
             p_stats->m_compLatency = distanceCalcLatencyMs;
             p_stats->m_diskReadLatency = (ioWaitLatencyMs > 0.0) ? ioWaitLatencyMs : batchReadTotalLatencyMs;
+
+            // M2-H Phase 1: Record per-posting I/O trace for bad posting identification
+            if (m_opt != nullptr && m_opt->m_enablePostingTrace)
+            {
+                p_stats->m_postingTraceRecords.clear();
+                p_stats->m_postingTraceRecords.reserve(postingListCount);
+                for (uint32_t pi = 0; pi < postingListCount; ++pi)
+                {
+                    auto curPostingID = p_exWorkSpace->m_postingIDs[pi];
+                    ListInfo *listInfo = &(m_listInfos[curPostingID]);
+
+                    PostingTraceRecord record;
+                    record.m_postingID = curPostingID;
+                    record.m_listPageCount = listInfo->listPageCount;
+                    record.m_listEleCount = static_cast<uint32_t>(listInfo->listEleCount);
+                    record.m_requestedBytes = static_cast<uint64_t>(listInfo->listPageCount) << PageSizeEx;
+                    record.m_ioWaitMs = postingIoWaitMs[pi];
+                    record.m_cacheHit = postingCacheHit[pi];
+                    p_stats->m_postingTraceRecords.emplace_back(record);
+                }
+            }
         }
         queryResults.SetScanned(listElements);
         return ErrorCode::Success;

@@ -1872,6 +1872,8 @@ ErrorCode Index<T>::RefineIndex(const std::vector<std::shared_ptr<Helper::DiskIO
 
 template <typename T> ErrorCode Index<T>::SetParameter(const char *p_param, const char *p_value, const char *p_section)
 {
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "SPANN::Index::SetParameter section=%s param=%s value=%s\n",
+                 p_section ? p_section : "null", p_param ? p_param : "null", p_value ? p_value : "null");
     if (SPTAG::Helper::StrUtils::StrEqualIgnoreCase(p_section, "BuildHead") &&
         !SPTAG::Helper::StrUtils::StrEqualIgnoreCase(p_param, "isExecute"))
     {

@@ -20,6 +20,19 @@ namespace Helper
 {
 
 // Simple INI Reader with basic functions. Case insensitive.
+//
+// IMPORTANT: Comment syntax
+// -------------------------
+// Only ';' (semicolon) is supported as a comment character.
+// '#' and '//' are NOT valid comments and will cause silent parse failures.
+//
+// Correct:   ; This is a comment
+// Incorrect: # This will break parsing
+// Incorrect: // This will break parsing
+//
+// Using '#' or '//' at line start will cause the line to be parsed as
+// a parameter-value pair, likely failing and skipping subsequent parameters.
+//
 class IniReader
 {
 public:

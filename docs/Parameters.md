@@ -1,5 +1,37 @@
 ## **Parameters**
 
+## **Configuration File Format**
+
+配置文件使用 INI 格式，有以下注意事项：
+
+### 注释语法
+
+**重要**：只有 `;`（分号）支持作为注释符。`#` 和 `//` 不是有效注释，会导致静默解析失败。
+
+```ini
+; 正确 - 分号注释
+; EnablePageCache=true
+
+# 错误 - 井号会被当作参数名解析，导致失败
+# This will break parsing
+
+// 错误 - 双斜杠同样不支持
+// This will also break parsing
+```
+
+使用错误注释符会导致：
+- 该行解析失败
+- 后续参数可能被跳过
+- 错误是**静默的**，不会报错
+
+### Section 和参数名
+
+- Section 和参数名**不区分大小写**（内部会转换为小写）
+- Section 格式：`[SectionName]`
+- 参数格式：`ParameterName=Value`
+
+---
+
 > Common Parameters
 
 |  ParametersName | type  |  default | definition|
