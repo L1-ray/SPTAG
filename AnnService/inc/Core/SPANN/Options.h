@@ -127,6 +127,7 @@ namespace SPTAG {
             int m_ioThreads;
             int m_searchPostingPageLimit;
             int m_searchInternalResultNum;
+            int m_postingBudget; // Number of postings to actually read (<= m_searchInternalResultNum)
             int m_rerank;
             bool m_recall_analysis;
             int m_debugBuildInternalResultNum;
@@ -138,6 +139,8 @@ namespace SPTAG {
             bool m_enablePayloadTrace;
             std::string m_payloadTraceOutput;
             double m_payloadTraceSampleRate;
+            bool m_enableHeadDistanceTrace;
+            std::string m_headDistanceTraceOutput;
             int m_ssdPostingFormatVersion;
             bool m_enableTwoStagePosting;
             bool m_enableChunkedPosting;
@@ -229,6 +232,19 @@ namespace SPTAG {
             // M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
             bool m_enablePreDedupeTrace;
             std::string m_preDedupeTraceOutput;
+
+            // Phase 3: Adaptive posting budget parameters
+            bool m_enableAdaptiveBudget;
+            float m_adaptiveBudgetMarginThreshold;
+            int m_adaptiveBudgetEasy;
+            int m_adaptiveBudgetHard;
+
+            // Phase 4: Learned policy parameters
+            bool m_enableLearnedBudget;
+            std::string m_learnedBudgetModelPath;
+            float m_learnedBudgetThreshold;
+            int m_learnedBudgetDefault;
+            int m_learnedBudgetMin;
 
             Options() {
 #define DefineBasicParameter(VarName, VarType, DefaultValue, RepresentStr) \

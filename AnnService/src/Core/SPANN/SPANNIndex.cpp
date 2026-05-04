@@ -723,9 +723,15 @@ template <typename T> ErrorCode Index<T>::SearchIndex(QueryResult &p_query, bool
         workSpace->m_deduper.clear();
         workSpace->m_postingIDs.clear();
 
+        // Determine posting budget (use m_postingBudget if set, otherwise use m_searchInternalResultNum)
+        int postingBudget = (m_options.m_postingBudget > 0) ?
+                            std::min(m_options.m_postingBudget, m_options.m_searchInternalResultNum) :
+                            m_options.m_searchInternalResultNum;
+
         float limitDist = p_queryResults->GetResult(0)->Dist * m_options.m_maxDistRatio;
         int i = 0;
-        for (; i < m_options.m_searchInternalResultNum; ++i)
+        int postingsCollected = 0;
+        for (; i < m_options.m_searchInternalResultNum && postingsCollected < postingBudget; ++i)
         {
             auto res = p_queryResults->GetResult(i);
             if (res->VID == -1 || (limitDist > 0.1 && res->Dist > limitDist))
@@ -733,6 +739,7 @@ template <typename T> ErrorCode Index<T>::SearchIndex(QueryResult &p_query, bool
             if (m_extraSearcher->CheckValidPosting(res->VID))
             {
                 workSpace->m_postingIDs.emplace_back(res->VID);
+                ++postingsCollected;
             }
             if (m_vectorTranslateMap.R() != 0)
                 res->VID = static_cast<SizeType>(*(m_vectorTranslateMap[res->VID]));
@@ -945,13 +952,117 @@ ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, SearchStats *p_stats, 
     workSpace->m_deduper.clear();
     workSpace->m_postingIDs.clear();
 
+    // Phase 3/4: Compute adaptive posting budget based on head distance margin or learned model
+    int postingBudget = m_options.m_searchInternalResultNum;
+    if (m_options.m_postingBudget > 0)
+    {
+        // Explicit budget set via config
+        postingBudget = std::min(m_options.m_postingBudget, m_options.m_searchInternalResultNum);
+    }
+    else if (m_options.m_enableLearnedBudget)
+    {
+        // Phase 4: Use learned policy
+        // Lazy-load the model on first use
+        if (m_budgetPredictor == nullptr)
+        {
+            std::lock_guard<std::mutex> lock(m_budgetPredictorMutex);
+            if (m_budgetPredictor == nullptr)
+            {
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                    "Loading learned budget models for the first query...\n");
+
+                m_budgetPredictor = std::make_unique<AdaptiveBudgetPredictor>();
+                m_budgetPredictor->SetDefaultBudget(m_options.m_learnedBudgetDefault);
+                m_budgetPredictor->SetThreshold(m_options.m_learnedBudgetThreshold);
+
+                std::string modelPath = m_options.m_learnedBudgetModelPath;
+                if (modelPath.empty())
+                {
+                    // Default path
+                    modelPath = m_options.m_indexDirectory + FolderSep + "adaptive_budget_models";
+                }
+
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                    "Model path: %s\n", modelPath.c_str());
+
+                std::vector<int> budgets = {32, 40, 48};
+                int loaded = m_budgetPredictor->LoadModels(modelPath, budgets);
+
+                // Debug: check each model file
+                for (int b : budgets) {
+                    std::string path = modelPath + "/risk_model_b" + std::to_string(b) + ".json";
+                    std::ifstream testFile(path);
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                        "Checking model file %s: exists=%d\n",
+                        path.c_str(), testFile.good());
+                }
+
+                if (loaded == 0)
+                {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Warning,
+                        "Failed to load learned budget models from %s, using default budget\n",
+                        modelPath.c_str());
+                }
+                else
+                {
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                        "Loaded %d learned budget models from %s\n",
+                        loaded, modelPath.c_str());
+                }
+            }
+        }
+
+        // Extract features from head distances
+        std::vector<float> headDistances;
+        headDistances.reserve(128);
+        for (int i = 0; i < m_options.m_searchInternalResultNum && i < 128; ++i)
+        {
+            auto res = p_queryResults->GetResult(i);
+            if (res->VID == -1) break;
+            headDistances.push_back(res->Dist);
+        }
+
+        std::vector<double> features;
+        AdaptiveBudgetFeatureExtractor::Extract(headDistances, features);
+
+        // Predict budget using learned model
+        if (m_budgetPredictor->IsLoaded())
+        {
+            postingBudget = m_budgetPredictor->PredictBudget(features);
+            postingBudget = std::max(postingBudget, m_options.m_learnedBudgetMin);
+            postingBudget = std::min(postingBudget, m_options.m_searchInternalResultNum);
+        }
+    }
+    else if (m_options.m_enableAdaptiveBudget)
+    {
+        // Phase 3: Rule-based policy
+        // Compute margin_16 = (d16 - d1) / d1
+        float d1 = p_queryResults->GetResult(0)->Dist;
+        float d16 = p_queryResults->GetResult(15)->Dist;  // 0-indexed, so index 15 is 16th result
+
+        if (d1 > 0.001f && d16 > 0.001f)
+        {
+            float margin_16 = (d16 - d1) / d1;
+            if (margin_16 >= m_options.m_adaptiveBudgetMarginThreshold)
+            {
+                postingBudget = m_options.m_adaptiveBudgetEasy;  // e.g., 48
+            }
+            else
+            {
+                postingBudget = m_options.m_adaptiveBudgetHard;  // e.g., 64
+            }
+        }
+        // else: fallback to default budget
+    }
+
     const int firstHeadVID = p_queryResults->GetResult(0)->VID;
     const float firstHeadDist = p_queryResults->GetResult(0)->Dist;
     int headResultsConsidered = 0;
+    int postingsCollected = 0;
 
     float limitDist = p_queryResults->GetResult(0)->Dist * m_options.m_maxDistRatio;
     int i = 0;
-    for (; i < m_options.m_searchInternalResultNum; ++i)
+    for (; i < m_options.m_searchInternalResultNum && postingsCollected < postingBudget; ++i)
     {
         auto res = p_queryResults->GetResult(i);
         if (res->VID == -1 || (limitDist > 0.1 && res->Dist > limitDist))
@@ -960,6 +1071,17 @@ ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, SearchStats *p_stats, 
         if (m_extraSearcher->CheckValidPosting(res->VID))
         {
             workSpace->m_postingIDs.emplace_back(res->VID);
+            ++postingsCollected;
+
+            // Phase 2: Record head distance for adaptive budget feature extraction
+            if (m_options.m_enableHeadDistanceTrace && p_stats != nullptr)
+            {
+                HeadDistanceTraceRecord record;
+                record.m_postingIndex = postingsCollected - 1;
+                record.m_postingID = res->VID;
+                record.m_headDist = res->Dist;
+                p_stats->m_headDistanceTraceRecords.emplace_back(record);
+            }
         }
 
         if (m_vectorTranslateMap.R() != 0)

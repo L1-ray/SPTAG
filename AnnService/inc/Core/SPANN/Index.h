@@ -27,6 +27,7 @@
 
 #include "IExtraSearcher.h"
 #include "Options.h"
+#include "AdaptiveBudgetModel.h"
 
 #include <functional>
 #include <shared_mutex>
@@ -58,6 +59,10 @@ namespace SPTAG
             std::unique_ptr<SPTAG::COMMON::IWorkSpaceFactory<ExtraWorkSpace>> m_workSpaceFactory;
 
             Options m_options;
+
+            // Phase 4: Learned budget predictor
+            mutable std::unique_ptr<AdaptiveBudgetPredictor> m_budgetPredictor;
+            mutable std::mutex m_budgetPredictorMutex;
 
             std::function<float(const T*, const T*, DimensionType)> m_fComputeDistance;
             int m_iBaseSquare;

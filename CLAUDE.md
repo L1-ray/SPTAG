@@ -171,72 +171,92 @@ PageCacheMaxBytes=268435456
 以下文档记录了 SPANN 优化工作的进展和状态：
 
 ### SPANN_Beyond_Official_Baseline_Plan_20260502.md
-**主要规划文档**，定义了在官方 strict `UInt8 + DEFAULT` baseline 上超越官方的目标和路径。
-- 目标：st8 QPS >= 5945，Recall@10 >= 0.978319
-- M1: Global I/O broker + page cache + in-flight coalescing **(已完成)**
-- M2-H: Hybrid selective code-first for bad postings **(已证伪: I/O wait 分布均匀)**
-- M4: Primary-secondary payload dedupe
-- 包含完整的 S0 诊断结果和 M1 实现完成报告
+**历史规划文档**，定义了在官方 strict `UInt8 + DEFAULT` baseline 上超越官方的目标和路径。
+- M1: Global I/O broker + page cache **(已完成: st8 +5%, st16 +13.6%)**
+- M2-H: Hybrid selective code-first **(已证伪: I/O wait 分布均匀)**
+- M4: Primary-secondary payload dedupe **(已证伪: 见下方结论)**
+
+### SPANN_M4_Storage_Optimized_Profile_Plan_20260503.md
+**M4 存储优化方案 - 已完成评估**
+- 目标：存储优化（非 QPS 优化）
+- **最终结论**：M4 仅作为 Storage-only Sidecar，不实现在线查询路径
+- 存储节省 73.1% ✅，但在线查询 pages/query 增加 10x ❌
+- 根因：Legacy Posting 结构提供 Spatial Locality，M4 Primary Store 打破这种 locality
+- 推荐用途：归档存储、分发打包、冷数据存储
+
+### SPANN_Query_Aware_Adaptive_Posting_Budget_Plan_20260503.md
+**当前主线规划文档**，定义 Query-aware Adaptive Posting Budget 方案。
+- 目标：在相同/近似 Recall 下减少不必要的 posting 读取
+- 核心思想：Easy query 少读、Hard query 多读
+- 执行顺序：Offline Oracle → Rule-based Policy → Learned Policy
 
 ### SIFT1M_Official_Alignment_Summary.md
 官方参数对齐与 strict `UInt8 + DEFAULT` baseline 测试结果总结。
 - 包含完整的 `SearchThreadNum`、`InternalResultNum`、`NumberOfThreads` sweep 结果
-- 记录了参数与性能指标的关系分析
 - 关键结论：st=4~8 是吞吐有效区间，ir=64~96 是 Recall/QPS 平衡区间
 
-### SPANN_M2_M3_Code_Plan_Review_20260501.md
-SPANN M2/M3 代码与验证方案审查记录。
-- 当前结论：two-stage 方向已证伪，官方 strict baseline 是性能主线
-- 记录了各优先级任务的状态和验收条件
-- 包含 P0~P5 的详细实验设计
+## spann_analysis/ 目录分析报告
 
-### SPANN_M2_M3_UInt8_Optimization_Memo.md
-P0/P1 优化工作记忆文件，记录具体实验结果。
-- Two-stage posting 格式尝试与失败原因分析
-- Per-phase cost attribution 结果
-- 结论：two-stage 在 legacy 口径下无法超越官方 baseline
+以下三个分析文件提供了深入的性能洞察：
+
+### Query_Level_Performance_Report.md
+查询级性能特征分析。
+- **关键发现**：SPANN 延迟增长亚线性 (10x 规模 → 11% 延迟增长)
+- I/O 主导：Batch Read 占 63-68% 延迟
+- ~99.6% 扫描元素被丢弃 (posting/page 粒度读放大)
+- M1 Cache 规模敏感性：SIFT10M 失效因 cross-query reuse 不足
+- 低 recall 查询的延迟并不高，问题出在 routing 而非 I/O
+
+### IO_Pattern_Analysis.md
+I/O 模式分析报告，通过实测 diskstats 确定测试时的 I/O 特征。
+- **结论**：4-16KB 小块 posting 粒度随机读为主
+- 证据：平均请求 7.87KB，合并率 0.01%，IOPS 137,932
+- 对比：NVMe 顺序读吞吐 3938 MB/s，SPANN 仅 1060 MB/s (27%)
+- 根因：Routing 由距离决定，不遵循 posting_id 顺序，物理位置分散
+
+### Posting_List_Analysis_Report.md
+Posting List 级别性能瓶颈分析。
+- **关键发现**：I/O Wait 分布均匀 (Gini ~0.3)，无集中热点
+- 77% posting 只被访问 1 次 (SIFT10M, Q=10,000)
+- Cross-query reuse 公式：R = (Q × K) / N
+- SIFT10M reuse = 1.28 次/posting (SIFT1M = 6.5 次)
+- 单页 posting 被访问比例最低 (28.9%)，多页 posting 被访问比例更高 (~50%)
 
 ## 当前进度 (2026-05-03)
 
+**主线**: Query-aware Adaptive Posting Budget
+
+### 已完成工作
+
 | 优先级 | 任务 | 状态 | 结果 |
 |--------|------|------|------|
-| S0 | Trace-only diagnosis | **已完成** | Cross-query page reuse 92.4%，M1 方向正确 |
-| M1 Phase 1 | Single-page posting cache | **已完成** | QPS +3.7% (st8)，p99.9 恶化 |
-| M1 Phase 2 | Verification + latency analysis | **已完成** | 256MB plateau，p99.9 恶化 3x |
-| M1 Phase 3 | Shard Lock implementation | **已完成** | p99.9 问题解决，QPS +5.0% |
-| M1 收尾 | 日志保存 + st sweep + 统计修正 | **已完成** | st1 回退 -6.2%，st4 回退 -4.8% |
-| M2-H Phase 1 | Per-posting I/O trace diagnosis | **已完成** | **STOPPED**: I/O wait 分布均匀 (29.63% < 30%) |
-| M4 | Primary-secondary dedupe | 暂缓 | 需要更多 duplicate VID 证据 |
+| S0 | Trace-only diagnosis | **已完成** | Cross-query page reuse 92.4% |
+| M1 | ShardedPageCache | **已完成** | st8 QPS +5.0%，st16 +13.6% |
+| M2-H | Selective Hybrid | **已证伪** | I/O wait 分布均匀 (Gini ~0.3) |
+| M4 | Storage-Optimized Sidecar | **已完成** | 存储 -73%，在线查询不可行 |
 
-### M1 最终状态
+### M4 最终结论
 
-**核心实验完成** / **st8 主线方案完成**
+| 阶段 | 状态 | 结果 |
+|------|------|------|
+| A0: Legacy baseline replay | ✅ 完成 | QPS=743, Recall=0.9778 |
+| A1: Storage-only sidecar builder | ✅ 完成 | 存储减少 **73.1%** |
+| A2: Offline query simulator | ✅ 完成 | VIDOrder: 2135, CoHit: 1257 pages/query |
+| A3: Pure online M4 prototype | ❌ 不执行 | A2 结果超出阈值 3.5x |
+| A4: Hybrid online M4 prototype | ❌ 不执行 | A2 结果不符合决策规则 |
 
-| st | Baseline QPS | Sharded QPS | Change | 状态 |
-|----|--------------|-------------|--------|------|
-| 1 | 925.7 | 868.1 | -6.2% | ⚠ 回退 |
-| 4 | 3630.7 | 3457.8 | -4.8% | ⚠ 回退 |
-| 8 | 5827.5 | **6120.0** | **+5.0%** | ✓ 达标 |
-| 16 | 5835.5 | **6631.3** | **+13.6%** | ✓ 大幅提升 |
+**结论**：M4 仅作为 Storage-only Sidecar，用于归档/分发/冷存储。
 
-### 关键结论
+### Query-aware Adaptive Budget 当前进度
 
-1. **ShardedPageCache 成功**：p99.9 从 10ms 降到 3.7ms
-2. **锁竞争降低 87%**：lock wait 从 449ms 降到 75ms
-3. **st8 QPS = 6120**：超过官方 baseline 目标 (5945)
-4. **st1/st4 回退**：低并发下 cache 开销 > I/O 节省
+| 阶段 | 任务 | 状态 |
+|------|------|------|
+| Phase 1 | Offline Oracle | 待开始 |
+| Phase 2 | Feature Extraction | 待开始 |
+| Phase 3 | Rule-based Policy | 待开始 |
+| Phase 4 | Learned Policy | 待开始 |
 
-### 推荐方案
-
-**ShardedPageCache + single-page cache + no admission**
-
-适用场景：st >= 8 的高并发搜索
-
-```ini
-[SearchSSDIndex]
-EnablePageCache=true
-PageCacheMaxBytes=268435456
-```
+详细计划见: `SPANN_Query_Aware_Adaptive_Posting_Budget_Plan_20260503.md`
 
 ## 常用测试命令
 
@@ -280,4 +300,3 @@ EnablePostingTrace=true
 2. 检查 section 名称是否正确（`[Base]`、`[SearchSSDIndex]` 等）
 3. 检查参数名拼写和大小写（虽然 `StrEqualIgnoreCase` 会忽略大小写）
 4. 在 `Options::SetParameter` 中添加日志确认解析路径
-

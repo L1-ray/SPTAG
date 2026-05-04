@@ -534,6 +534,44 @@ template <typename ValueType> ErrorCode Search(SPANN::Index<ValueType> *p_index)
         }
     }
 
+    // Phase 2: Output head distance trace for adaptive budget feature extraction
+    if (p_opts.m_enableHeadDistanceTrace && !p_opts.m_headDistanceTraceOutput.empty())
+    {
+        std::ofstream traceOut(p_opts.m_headDistanceTraceOutput.c_str(), std::ios::out | std::ios::trunc);
+        if (!traceOut.is_open())
+        {
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open head distance trace CSV: %s\n",
+                         p_opts.m_headDistanceTraceOutput.c_str());
+        }
+        else
+        {
+            traceOut << "query_id,posting_index,posting_id,head_dist\n";
+            traceOut << std::fixed << std::setprecision(6);
+
+            uint64_t rowsWritten = 0;
+            for (int i = 0; i < effectiveQueries; ++i)
+            {
+                const auto &records = stats[i].m_headDistanceTraceRecords;
+                for (size_t traceIndex = 0; traceIndex < records.size(); ++traceIndex)
+                {
+                    const auto &record = records[traceIndex];
+                    traceOut << i << "," << record.m_postingIndex << "," << record.m_postingID << ","
+                             << record.m_headDist << "\n";
+                    ++rowsWritten;
+                }
+            }
+            traceOut.close();
+            SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Head distance trace CSV saved to %s, rows=%llu\n",
+                         p_opts.m_headDistanceTraceOutput.c_str(), static_cast<unsigned long long>(rowsWritten));
+        }
+        // Clear records to free memory
+        for (int i = 0; i < effectiveQueries; ++i)
+        {
+            stats[i].m_headDistanceTraceRecords.clear();
+            stats[i].m_headDistanceTraceRecords.shrink_to_fit();
+        }
+    }
+
     std::vector<SPANN::SearchStats> statsForPrint;
     if (effectiveQueries > 0)
     {

@@ -166,3 +166,15 @@ install(TARGETS ssdservingLib ssdserving
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib)
+
+# M4 Sidecar Builder
+file(GLOB M4SIDECAR_FILES ${AnnService}/src/Tools/M4SidecarBuilder/*.cpp)
+add_executable(m4sidecar_builder ${M4SIDECAR_FILES})
+target_link_libraries(m4sidecar_builder SPTAGLibStatic ${Boost_LIBRARIES})
+target_compile_definitions(m4sidecar_builder PRIVATE _exe)
+
+install(TARGETS m4sidecar_builder
+  RUNTIME DESTINATION bin
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib)
+

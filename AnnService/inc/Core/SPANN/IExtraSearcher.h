@@ -60,6 +60,14 @@ struct PreDedupeTraceRecord
     bool m_wasDeduped = true;         // Default: deduped; set false if VID survived dedupe
 };
 
+// Phase 2: Head distance trace for adaptive budget feature extraction
+struct HeadDistanceTraceRecord
+{
+    int m_postingIndex = -1;          // Index in the posting list (0-based)
+    int m_postingID = -1;             // Posting ID (cluster ID)
+    float m_headDist = MaxDist;       // Head distance from query to cluster center
+};
+
 struct SearchStats
 {
     SearchStats()
@@ -154,6 +162,7 @@ struct SearchStats
         m_payloadTraceRecords.clear();
         m_postingTraceRecords.clear();
         m_preDedupeTraceRecords.clear();
+        m_headDistanceTraceRecords.clear();
     }
 
     void Add(const SearchStats &other)
@@ -431,6 +440,8 @@ struct SearchStats
     std::vector<PostingTraceRecord> m_postingTraceRecords;
     // M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
     std::vector<PreDedupeTraceRecord> m_preDedupeTraceRecords;
+    // Phase 2: Head distance trace for adaptive budget feature extraction
+    std::vector<HeadDistanceTraceRecord> m_headDistanceTraceRecords;
 };
 
 struct IndexStats

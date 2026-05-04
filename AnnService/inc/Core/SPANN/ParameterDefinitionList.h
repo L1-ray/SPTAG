@@ -124,6 +124,7 @@ DefineSSDParameter(m_queryCountLimit, int, (std::numeric_limits<int>::max)(), "Q
 DefineSSDParameter(m_maxDistRatio, float, 10000, "MaxDistRatio")
 DefineSSDParameter(m_ioThreads, int, 4, "IOThreadsPerHandler") // Mutable
 DefineSSDParameter(m_searchInternalResultNum, int, 64, "SearchInternalResultNum") // Mutable
+DefineSSDParameter(m_postingBudget, int, -1, "PostingBudget") // -1 means use m_searchInternalResultNum
 DefineSSDParameter(m_searchPostingPageLimit, int, 3, "SearchPostingPageLimit") // Mutable
 DefineSSDParameter(m_rerank, int, 0, "Rerank")
 DefineSSDParameter(m_enableADC, bool, false, "EnableADC")
@@ -136,6 +137,8 @@ DefineSSDParameter(m_detailedIOStatsSampleRate, double, 1.0, "DetailedIOStatsSam
 DefineSSDParameter(m_enablePayloadTrace, bool, false, "EnablePayloadTrace")
 DefineSSDParameter(m_payloadTraceOutput, std::string, std::string(""), "PayloadTraceOutput")
 DefineSSDParameter(m_payloadTraceSampleRate, double, 1.0, "PayloadTraceSampleRate")
+DefineSSDParameter(m_enableHeadDistanceTrace, bool, false, "EnableHeadDistanceTrace")
+DefineSSDParameter(m_headDistanceTraceOutput, std::string, std::string(""), "HeadDistanceTraceOutput")
 
 // M1: Global Page Cache parameters
 DefineSSDParameter(m_enablePageCache, bool, false, "EnablePageCache")
@@ -151,6 +154,19 @@ DefineSSDParameter(m_selectiveHybridModeAllowlist, bool, true, "SelectiveHybridM
 // M4-0: Pre-dedupe trace for primary-secondary payload dedupe analysis
 DefineSSDParameter(m_enablePreDedupeTrace, bool, false, "EnablePreDedupeTrace")
 DefineSSDParameter(m_preDedupeTraceOutput, std::string, std::string(""), "PreDedupeTraceOutput")
+
+// Phase 3: Adaptive posting budget parameters
+DefineSSDParameter(m_enableAdaptiveBudget, bool, false, "EnableAdaptiveBudget")
+DefineSSDParameter(m_adaptiveBudgetMarginThreshold, float, 0.35f, "AdaptiveBudgetMarginThreshold")
+DefineSSDParameter(m_adaptiveBudgetEasy, int, 48, "AdaptiveBudgetEasy")
+DefineSSDParameter(m_adaptiveBudgetHard, int, 64, "AdaptiveBudgetHard")
+
+// Phase 4: Learned policy parameters
+DefineSSDParameter(m_enableLearnedBudget, bool, false, "EnableLearnedBudget")
+DefineSSDParameter(m_learnedBudgetModelPath, std::string, std::string(""), "LearnedBudgetModelPath")
+DefineSSDParameter(m_learnedBudgetThreshold, float, 0.97f, "LearnedBudgetThreshold")
+DefineSSDParameter(m_learnedBudgetDefault, int, 64, "LearnedBudgetDefault")
+DefineSSDParameter(m_learnedBudgetMin, int, 32, "LearnedBudgetMin")
 
 DefineSSDParameter(m_ssdPostingFormatVersion, int, 0, "SSDPostingFormatVersion")
 DefineSSDParameter(m_enableTwoStagePosting, bool, false, "EnableTwoStagePosting")
