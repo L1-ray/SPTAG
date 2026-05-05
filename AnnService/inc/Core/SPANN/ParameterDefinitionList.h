@@ -165,6 +165,8 @@ DefineSSDParameter(m_adaptiveBudgetHard, int, 64, "AdaptiveBudgetHard")
 DefineSSDParameter(m_enableLearnedBudget, bool, false, "EnableLearnedBudget")
 DefineSSDParameter(m_learnedBudgetModelPath, std::string, std::string(""), "LearnedBudgetModelPath")
 DefineSSDParameter(m_learnedBudgetThreshold, float, 0.97f, "LearnedBudgetThreshold")
+DefineSSDParameter(m_learnedBudgetThresholds, std::string, std::string(""), "LearnedBudgetThresholds")
+DefineSSDParameter(m_learnedBudgetCandidates, std::string, std::string("32,40,48"), "LearnedBudgetCandidates")
 DefineSSDParameter(m_learnedBudgetDefault, int, 64, "LearnedBudgetDefault")
 DefineSSDParameter(m_learnedBudgetMin, int, 32, "LearnedBudgetMin")
 

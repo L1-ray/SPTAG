@@ -1,0 +1,5 @@
+policy,queries,pages_saving_pct_vs64,recall10_delta_vs64,miss_rate_pct,low_recall_lt_0_7,low_recall_lt_0_5,b16_pct,b24_pct,b32_pct,b40_pct,b48_pct,b56_pct,b64_pct,miss_from_b16_24,low07_from_b16_24,oracle_easy_le24_pct,b16_b24_pct,pass_recall_delta_le_0p0015,pass_low_tail_not_worse_vs_A3,pass_low_budget_not_over_oracle_easy,delta_low07_vs_A3,delta_low05_vs_A3
+A3_ref,2000,22.954891503134544,-0.006700000000000039,5.9,5,0,0.0,0.0,15.05,16.05,27.0,35.6,6.3,0,0,60.6,0.0,False,True,True,,
+A4_cons_v1,2000,21.67853284677742,-0.005950000000000011,5.3,5,0,0.0,3.55,9.45,14.9,24.9,38.55,8.65,0,0,60.6,3.55,False,True,True,0.0,0.0
+A4_cons_v2,2000,22.586146766359597,-0.006300000000000083,5.55,5,0,0.2,4.45,9.5,15.6,25.65,36.7,7.9,0,0,60.6,4.65,False,True,True,0.0,0.0
+A4_cons_v3,2000,23.48738101921556,-0.00660000000000005,5.8,5,0,0.8,5.15,9.1,16.05,27.0,34.7,7.2,0,0,60.6,5.95,False,True,True,0.0,0.0

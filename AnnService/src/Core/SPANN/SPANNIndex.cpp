@@ -6,10 +6,13 @@
 #include "inc/Core/SPANN/Index.h"
 #include "inc/Helper/SimpleIniReader.h"
 #include "inc/Helper/VectorSetReaders/MemoryReader.h"
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <random>
+#include <sstream>
 #include <shared_mutex>
+#include <unordered_map>
 
 #include "inc/Core/ResultIterator.h"
 #include "inc/Core/SPANN/SPANNResultIterator.h"
@@ -90,6 +93,100 @@ inline ChunkPruneModeKind GetChunkPruneModeKind(const std::string &value)
     }
 
     return ChunkPruneModeKind::Invalid;
+}
+
+inline std::vector<int> ParseLearnedBudgetCandidates(const std::string& value, const std::vector<int>& fallback)
+{
+    std::string trimmed = TrimCopy(value);
+    if (trimmed.empty())
+    {
+        return fallback;
+    }
+
+    std::vector<int> budgets;
+    std::stringstream ss(trimmed);
+    std::string token;
+    while (std::getline(ss, token, ','))
+    {
+        token = TrimCopy(token);
+        if (token.empty())
+        {
+            continue;
+        }
+        try
+        {
+            int b = std::stoi(token);
+            if (b > 0)
+            {
+                budgets.push_back(b);
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+
+    if (budgets.empty())
+    {
+        return fallback;
+    }
+
+    std::sort(budgets.begin(), budgets.end());
+    budgets.erase(std::unique(budgets.begin(), budgets.end()), budgets.end());
+    return budgets;
+}
+
+inline std::unordered_map<int, double> ParseLearnedBudgetThresholds(const std::string& value)
+{
+    std::unordered_map<int, double> thresholds;
+    std::string trimmed = TrimCopy(value);
+    if (trimmed.empty())
+    {
+        return thresholds;
+    }
+
+    std::stringstream ss(trimmed);
+    std::string token;
+    while (std::getline(ss, token, ','))
+    {
+        token = TrimCopy(token);
+        if (token.empty())
+        {
+            continue;
+        }
+
+        size_t sep = token.find(':');
+        if (sep == std::string::npos)
+        {
+            sep = token.find('=');
+        }
+        if (sep == std::string::npos)
+        {
+            continue;
+        }
+
+        std::string bStr = TrimCopy(token.substr(0, sep));
+        std::string tStr = TrimCopy(token.substr(sep + 1));
+        if (bStr.empty() || tStr.empty())
+        {
+            continue;
+        }
+
+        try
+        {
+            int b = std::stoi(bStr);
+            double t = std::stod(tStr);
+            if (b > 0 && t >= 0.0 && t <= 1.0)
+            {
+                thresholds[b] = t;
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+
+    return thresholds;
 }
 
 inline std::string GetPostingMetadataFilePath(const Options &options)
@@ -985,8 +1082,20 @@ ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, SearchStats *p_stats, 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
                     "Model path: %s\n", modelPath.c_str());
 
-                std::vector<int> budgets = {32, 40, 48};
+                std::vector<int> budgets = ParseLearnedBudgetCandidates(
+                    m_options.m_learnedBudgetCandidates, {32, 40, 48});
                 int loaded = m_budgetPredictor->LoadModels(modelPath, budgets);
+
+                auto budgetThresholds = ParseLearnedBudgetThresholds(m_options.m_learnedBudgetThresholds);
+                if (!budgetThresholds.empty())
+                {
+                    m_budgetPredictor->SetBudgetThresholds(budgetThresholds);
+                    for (const auto& kv : budgetThresholds)
+                    {
+                        SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
+                            "Learned budget threshold: B=%d threshold=%.4f\n", kv.first, kv.second);
+                    }
+                }
 
                 // Debug: check each model file
                 for (int b : budgets) {
@@ -1023,7 +1132,7 @@ ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, SearchStats *p_stats, 
         }
 
         std::vector<double> features;
-        AdaptiveBudgetFeatureExtractor::Extract(headDistances, features);
+        AdaptiveBudgetFeatureExtractor::Extract(headDistances, features, m_options.m_searchInternalResultNum);
 
         // Predict budget using learned model
         if (m_budgetPredictor->IsLoaded())

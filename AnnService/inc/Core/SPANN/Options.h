@@ -243,6 +243,8 @@ namespace SPTAG {
             bool m_enableLearnedBudget;
             std::string m_learnedBudgetModelPath;
             float m_learnedBudgetThreshold;
+            std::string m_learnedBudgetThresholds;
+            std::string m_learnedBudgetCandidates;
             int m_learnedBudgetDefault;
             int m_learnedBudgetMin;
 

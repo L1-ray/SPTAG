@@ -1,0 +1,29 @@
+{
+  "dataset": "sift10m",
+  "test_queries": 2000,
+  "available_budgets": [
+    16,
+    32,
+    40,
+    48,
+    56,
+    64,
+    80,
+    96,
+    128
+  ],
+  "oracle_saving_pct": 43.399866615853654,
+  "global_threshold": 0.85,
+  "per_threshold": {
+    "32": 0.95,
+    "40": 0.92,
+    "48": 0.88,
+    "56": 0.82
+  },
+  "model_budgets_trained": [
+    32,
+    40,
+    48,
+    56
+  ]
+}

@@ -194,7 +194,7 @@ private:
 
 /**
  * Adaptive budget predictor using risk-control models.
- * Uses separate models for B=32, B=40, B=48 to predict safety probability.
+ * Uses separate models for candidate budgets to predict safety probability.
  */
 class AdaptiveBudgetPredictor {
 public:
@@ -203,7 +203,7 @@ public:
     /**
      * Load all risk models from directory.
      * @param modelDir Directory containing risk_model_b32.json, etc.
-     * @param budgets List of budgets to load (e.g., {32, 40, 48})
+     * @param budgets List of budgets to load (e.g., {32, 40, 48, 56})
      * @return Number of models loaded successfully
      */
     int LoadModels(const std::string& modelDir, const std::vector<int>& budgets) {
@@ -241,7 +241,7 @@ public:
             auto it = m_models.find(b);
             if (it != m_models.end() && it->second.IsLoaded()) {
                 double prob = it->second.Predict(features);
-                if (prob >= m_threshold) {
+                if (prob >= GetThresholdForBudget(b)) {
                     return b;  // Safe to use this budget
                 }
             }
@@ -273,6 +273,31 @@ public:
     double GetThreshold() const { return m_threshold; }
 
     /**
+     * Set per-budget thresholds. Budgets not present here use global threshold.
+     */
+    void SetBudgetThresholds(const std::unordered_map<int, double>& thresholds) {
+        m_budgetThresholds = thresholds;
+    }
+
+    /**
+     * Set threshold for one budget.
+     */
+    void SetBudgetThreshold(int budget, double threshold) {
+        m_budgetThresholds[budget] = threshold;
+    }
+
+    /**
+     * Get threshold for one budget.
+     */
+    double GetThresholdForBudget(int budget) const {
+        auto it = m_budgetThresholds.find(budget);
+        if (it != m_budgetThresholds.end()) {
+            return it->second;
+        }
+        return m_threshold;
+    }
+
+    /**
      * Set default budget (fallback).
      */
     void SetDefaultBudget(int budget) { m_defaultBudget = budget; }
@@ -285,6 +310,7 @@ public:
 
 private:
     std::unordered_map<int, AdaptiveBudgetModel> m_models;
+    std::unordered_map<int, double> m_budgetThresholds;
     std::vector<int> m_budgets;
     int m_defaultBudget;
     double m_threshold;
@@ -300,93 +326,126 @@ public:
      * Extract features from head distances.
      * @param headDistances Distances from head search (sorted by distance)
      * @param features Output feature vector
+     * @param internalResultNum InternalResultNum config (determines feature count)
+     *
+     * Feature order:
+     * - ir=64 (24 features): d1, d2, d4, d8, d16, d32, d64, margin_2/4/8/16/32/64,
+     *   ratio_8/16/64, slope_1_8/8_16/16_64, var_16/64, entropy_16/64, margin_16_32_ratio
+     * - ir=128 (27 features): above + d96, d128, slope_64_96
      */
     static void Extract(const std::vector<float>& headDistances,
-                       std::vector<double>& features) {
-        features.resize(27, 0.0);  // 27 features
+                       std::vector<double>& features,
+                       int internalResultNum = 64) {
+        bool isIR128 = (internalResultNum >= 128);
+        int numFeatures = isIR128 ? 27 : 24;
+        features.resize(numFeatures, 0.0);
 
         if (headDistances.empty()) {
             return;
         }
 
-        // d1, d2, d4, d8, d16, d32, d64, d96, d128
-        int distIndices[] = {0, 1, 3, 7, 15, 31, 63, 95, 127};
-        for (int i = 0; i < 9; i++) {
-            if (distIndices[i] < static_cast<int>(headDistances.size())) {
-                features[i] = static_cast<double>(headDistances[distIndices[i]]);
+        int n = static_cast<int>(headDistances.size());
+
+        // Raw distances: d1, d2, d4, d8, d16, d32, d64 (7 features, indices 0-6)
+        // For ir=128: also d96, d128 (2 more features, indices 7-8)
+        int distIndices64[] = {0, 1, 3, 7, 15, 31, 63};
+        int distIndices128[] = {0, 1, 3, 7, 15, 31, 63, 95, 127};
+
+        if (isIR128) {
+            for (int i = 0; i < 9; i++) {
+                if (distIndices128[i] < n) {
+                    features[i] = static_cast<double>(headDistances[distIndices128[i]]);
+                }
+            }
+        } else {
+            for (int i = 0; i < 7; i++) {
+                if (distIndices64[i] < n) {
+                    features[i] = static_cast<double>(headDistances[distIndices64[i]]);
+                }
             }
         }
 
         float d1 = headDistances[0];
-        float d1_safe = (d1 > 0.001f) ? d1 : 0.001f;
 
-        // margin_2, margin_4, margin_8, margin_16, margin_32, margin_64
+        // Margins: margin_2, margin_4, margin_8, margin_16, margin_32, margin_64
+        // ir=64: indices 7-12, ir=128: indices 9-14
         int marginIndices[] = {1, 3, 7, 15, 31, 63};
+        int marginOffset = isIR128 ? 9 : 7;
         for (int i = 0; i < 6; i++) {
             int idx = marginIndices[i];
-            if (idx < static_cast<int>(headDistances.size()) && d1 > 0) {
-                features[9 + i] = (headDistances[idx] - d1) / d1;
+            if (idx < n && d1 > 0) {
+                features[marginOffset + i] = (headDistances[idx] - d1) / d1;
             }
         }
 
-        // ratio_8, ratio_16, ratio_64
+        // Ratios: ratio_8, ratio_16, ratio_64
+        // ir=64: indices 13-15, ir=128: indices 15-17
         int ratioIndices[] = {7, 15, 63};
+        int ratioOffset = isIR128 ? 15 : 13;
         for (int i = 0; i < 3; i++) {
             int idx = ratioIndices[i];
-            if (idx < static_cast<int>(headDistances.size()) && d1 > 0) {
-                features[15 + i] = headDistances[idx] / d1;
+            if (idx < n && d1 > 0) {
+                features[ratioOffset + i] = headDistances[idx] / d1;
             }
         }
 
-        // slope_1_8, slope_8_16, slope_16_64, slope_64_96
+        // Slopes: slope_1_8, slope_8_16, slope_16_64 (+ slope_64_96 for ir=128)
+        // ir=64: indices 16-18, ir=128: indices 18-21
+        int slopeOffset = isIR128 ? 18 : 16;
         auto safeSlope = [&](int start, int end) -> float {
-            if (end < static_cast<int>(headDistances.size())) {
+            if (end < n) {
                 return (headDistances[end] - headDistances[start]) / (end - start);
             }
             return 0.0f;
         };
-        features[18] = safeSlope(0, 7);    // slope_1_8
-        features[19] = safeSlope(7, 15);   // slope_8_16
-        features[20] = safeSlope(15, 63);  // slope_16_64
-        features[21] = safeSlope(63, 95);  // slope_64_96
+        features[slopeOffset] = safeSlope(0, 7);     // slope_1_8
+        features[slopeOffset + 1] = safeSlope(7, 15); // slope_8_16
+        features[slopeOffset + 2] = safeSlope(15, 63); // slope_16_64
 
-        // var_16, var_64
-        auto variance = [&](int n) -> float {
-            if (n > static_cast<int>(headDistances.size())) n = headDistances.size();
-            if (n < 2) return 0.0f;
+        if (isIR128) {
+            features[slopeOffset + 3] = safeSlope(63, 95); // slope_64_96
+        }
+
+        // Variance: var_16, var_64
+        // ir=64: indices 19-20, ir=128: indices 22-23
+        int varOffset = isIR128 ? 22 : 19;
+        auto variance = [&](int count) -> float {
+            int cnt = std::min(count, n);
+            if (cnt < 2) return 0.0f;
             float mean = 0.0f;
-            for (int i = 0; i < n; i++) mean += headDistances[i];
-            mean /= n;
+            for (int i = 0; i < cnt; i++) mean += headDistances[i];
+            mean /= cnt;
             float var = 0.0f;
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < cnt; i++) {
                 float diff = headDistances[i] - mean;
                 var += diff * diff;
             }
-            return var / n;
+            return var / cnt;
         };
-        features[22] = variance(16);  // var_16
-        features[23] = variance(64);  // var_64
+        features[varOffset] = variance(16);     // var_16
+        features[varOffset + 1] = variance(64); // var_64
 
-        // entropy_16, entropy_64
-        auto entropy = [&](int n) -> float {
-            if (n > static_cast<int>(headDistances.size())) n = headDistances.size();
-            if (n < 2) return 0.0f;
+        // Entropy: entropy_16, entropy_64
+        // ir=64: indices 21-22, ir=128: indices 24-25
+        int entropyOffset = isIR128 ? 24 : 21;
+        auto entropy = [&](int count) -> float {
+            int cnt = std::min(count, n);
+            if (cnt < 2) return 0.0f;
 
-            // Softmax over negative distances
             float maxVal = headDistances[0];
-            for (int i = 1; i < n; i++) {
+            for (int i = 1; i < cnt; i++) {
                 if (headDistances[i] > maxVal) maxVal = headDistances[i];
             }
 
             float sum = 0.0f;
-            std::vector<float> probs(n);
-            for (int i = 0; i < n; i++) {
+            std::vector<float> probs(cnt);
+            for (int i = 0; i < cnt; i++) {
                 probs[i] = std::exp(-(headDistances[i] - maxVal));
                 sum += probs[i];
             }
 
             float ent = 0.0f;
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < cnt; i++) {
                 float p = probs[i] / sum;
                 if (p > 1e-10f) {
                     ent -= p * std::log(p);
@@ -394,31 +453,45 @@ public:
             }
             return ent;
         };
-        features[24] = entropy(16);  // entropy_16
-        features[25] = entropy(64);  // entropy_64
+        features[entropyOffset] = entropy(16);     // entropy_16
+        features[entropyOffset + 1] = entropy(64); // entropy_64
 
         // margin_16_32_ratio
-        float margin16 = features[12];  // margin_16
-        float margin32 = features[13];  // margin_32
+        // ir=64: index 23, ir=128: index 26
+        int lastIdx = isIR128 ? 26 : 23;
+        float margin16 = features[marginOffset + 3];  // margin_16
+        float margin32 = features[marginOffset + 4];  // margin_32
         if (margin32 > 0) {
-            features[26] = margin16 / margin32;
+            features[lastIdx] = margin16 / margin32;
         }
     }
 
     /**
-     * Feature names for debugging/logging.
+     * Get feature names for debugging/logging.
      */
-    static const std::vector<std::string>& GetFeatureNames() {
-        static const std::vector<std::string> names = {
-            "d1", "d2", "d4", "d8", "d16", "d32", "d64", "d96", "d128",
-            "margin_2", "margin_4", "margin_8", "margin_16", "margin_32", "margin_64",
-            "ratio_8", "ratio_16", "ratio_64",
-            "slope_1_8", "slope_8_16", "slope_16_64", "slope_64_96",
-            "var_16", "var_64",
-            "entropy_16", "entropy_64",
-            "margin_16_32_ratio"
-        };
-        return names;
+    static std::vector<std::string> GetFeatureNames(int internalResultNum = 64) {
+        bool isIR128 = (internalResultNum >= 128);
+        if (isIR128) {
+            return {
+                "d1", "d2", "d4", "d8", "d16", "d32", "d64", "d96", "d128",
+                "margin_2", "margin_4", "margin_8", "margin_16", "margin_32", "margin_64",
+                "ratio_8", "ratio_16", "ratio_64",
+                "slope_1_8", "slope_8_16", "slope_16_64", "slope_64_96",
+                "var_16", "var_64",
+                "entropy_16", "entropy_64",
+                "margin_16_32_ratio"
+            };
+        } else {
+            return {
+                "d1", "d2", "d4", "d8", "d16", "d32", "d64",
+                "margin_2", "margin_4", "margin_8", "margin_16", "margin_32", "margin_64",
+                "ratio_8", "ratio_16", "ratio_64",
+                "slope_1_8", "slope_8_16", "slope_16_64",
+                "var_16", "var_64",
+                "entropy_16", "entropy_64",
+                "margin_16_32_ratio"
+            };
+        }
     }
 };
 
