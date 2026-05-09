@@ -300,3 +300,103 @@ EnablePostingTrace=true
 2. 检查 section 名称是否正确（`[Base]`、`[SearchSSDIndex]` 等）
 3. 检查参数名拼写和大小写（虽然 `StrEqualIgnoreCase` 会忽略大小写）
 4. 在 `Options::SetParameter` 中添加日志确认解析路径
+
+## LightGBM 模型转换 JSON 格式踩坑（2026-05-08）
+
+### 问题描述
+
+C++ 代码 (`AdaptiveBudgetModel.h`) 需要加载 JSON 格式的 LightGBM 模型，但直接从 LightGBM 转换时踩了坑。
+
+### 错误方法：从 dump_model() 嵌套结构转换
+
+```python
+# 错误方法 - dump_model() 返回嵌套树结构
+dump = model.dump_model()
+# tree_structure 是嵌套的 dict:
+# {"split_feature": 0, "left_child": {...}, "right_child": {...}}
+```
+
+**问题**：手动将嵌套结构扁平化时，`split_feature` 数组使用前序遍历，但 `left_child`/`right_child` 索引基于后序遍历，导致索引不匹配，预测结果完全错误。
+
+**症状**：
+- JSON 模型预测值与 LightGBM 预测值差异巨大（如 0.09 vs 0.87）
+- 节点 0 的 `left_child` 应该是内部节点索引，却指向叶子节点
+
+### 正确方法：从 save_model() 文本格式解析
+
+```python
+# 正确方法 - save_model() 输出已扁平化的文本格式
+model.save_model('model.txt')
+# 文本格式已包含正确扁平化的数组:
+# split_feature=11 23 12 ...
+# left_child=1 4 -1 ...
+# right_child=2 5 -2 ...
+```
+
+使用 `scripts/export_lgbm_to_json.py` 直接解析这个格式：
+
+```bash
+python3 scripts/export_lgbm_to_json.py model.txt model.json
+```
+
+### JSON 格式要求
+
+C++ 代码期望的 JSON 结构：
+
+```json
+{
+  "feature_names": ["d1", "d2", ...],
+  "num_features": 24,
+  "trees": [
+    {
+      "num_leaves": 31,
+      "split_feature": [11, 23, 12, ...],
+      "threshold": [0.385, 0.752, ...],
+      "left_child": [1, -1, 3, ...],
+      "right_child": [2, -2, 4, ...],
+      "leaf_value": [0.871, 0.902, ...]
+    }
+  ]
+}
+```
+
+**关键点**：
+- `left_child`/`right_child` 中负数表示叶子节点，索引为 `-(value) - 1`
+- C++ 遍历时：`while (node >= 0) { ... }` 然后用 `leaf_idx = -(node) - 1` 获取叶子值
+- 所有树的叶子值求和后经过 sigmoid：`1 / (1 + exp(-sum))`
+
+### 验证方法
+
+```python
+import json
+import lightgbm as lgb
+import numpy as np
+
+def predict_single_tree(tree, x):
+    node = 0
+    while node >= 0:
+        if x[tree['split_feature'][node]] <= tree['threshold'][node]:
+            node = tree['left_child'][node]
+        else:
+            node = tree['right_child'][node]
+    leaf_idx = -node - 1
+    return tree['leaf_value'][leaf_idx]
+
+def predict_model(json_model, features):
+    total = sum(predict_single_tree(t, features) for t in json_model['trees'])
+    return 1.0 / (1.0 + np.exp(-total))
+
+# 对比验证
+with open('model.json') as f:
+    json_model = json.load(f)
+lgb_model = lgb.Booster(model_file='model.txt')
+
+json_pred = predict_model(json_model, features)
+lgb_pred = lgb_model.predict(features.reshape(1, -1))[0]
+assert abs(json_pred - lgb_pred) < 1e-6, "转换错误！"
+```
+
+### 已转换的正确模型位置
+
+- SIFT1M 模型：`results/adaptive_budget/strict_train_test/risk_model_b*.json`
+- SIFT10M 模型：`results/adaptive_budget/sift10m_specific/risk_model_b*.json`

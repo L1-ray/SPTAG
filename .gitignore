@@ -462,3 +462,11 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# SPTAG project specific ignores
+results/
+Release/
+build/
+testindices*
+*.bin
+perftest_*.bin
